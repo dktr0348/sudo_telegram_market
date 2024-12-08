@@ -13,6 +13,7 @@ class Database:
             self.connection = sqlite3.connect(db_file)
             self.cursor = self.connection.cursor()
             self.create_tables()
+            self.add_email_column()
         except sqlite3.Error as e:
             logging.error(f"Ошибка при подключении к БД: {e}")
             raise
@@ -35,6 +36,7 @@ class Database:
                 user_id INTEGER PRIMARY KEY,
                 phone_number TEXT,
                 address TEXT,
+                email TEXT,
                 FOREIGN KEY (user_id) REFERENCES users (user_id)
             )
         ''')
@@ -81,6 +83,7 @@ class Database:
                 user_id INTEGER PRIMARY KEY,
                 name TEXT,
                 phone_number TEXT,
+                email TEXT,
                 location_lat REAL,
                 location_lon REAL,
                 age INTEGER,
@@ -104,13 +107,13 @@ class Database:
         except sqlite3.Error:
             return False
     
-    def save_contact(self, user_id: int, phone_number: str, address: str = None) -> bool:
+    def save_contact(self, user_id: int, phone_number: str, email: str, address: str = None) -> bool:
         """Сохранение контактных данных пользователя"""
         try:
             self.cursor.execute('''
-                INSERT OR REPLACE INTO contacts (user_id, phone_number, address)
+                INSERT OR REPLACE INTO contacts (user_id, phone_number, email, address, email)
                 VALUES (?, ?, ?)
-            ''', (user_id, phone_number, address))
+            ''', (user_id, phone_number, email, address))
             self.connection.commit()
             return True
         except sqlite3.Error:
@@ -164,16 +167,16 @@ class Database:
         self.cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
         return self.cursor.fetchone()
     
-    def register_user(self, user_id: int, name: str, phone: str, 
+    def register_user(self, user_id: int, name: str, phone: str, email: str, 
                      location_lat: float, location_lon: float, 
                      age: int, photo_id: str) -> bool:
         """Регистрация пользователя с полными данными"""
         try:
             self.cursor.execute('''
                 INSERT OR REPLACE INTO registered_users 
-                (user_id, name, phone_number, location_lat, location_lon, age, photo_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (user_id, name, phone, location_lat, location_lon, age, photo_id))
+                (user_id, name, phone_number, email, location_lat, location_lon, age, photo_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, name, phone, email, location_lat, location_lon, age, photo_id))
             self.connection.commit()
             return True
         except sqlite3.Error as e:
@@ -197,4 +200,25 @@ class Database:
             JOIN users u ON ru.user_id = u.user_id
             WHERE ru.user_id = ?
         ''', (user_id,))
-        return self.cursor.fetchone() 
+        return self.cursor.fetchone()
+    
+    def add_email_column(self):
+        """Добавление столбца email в существующие таблицы"""
+        try:
+            # Добавляем столбец в таблицу contacts
+            self.cursor.execute('''
+                ALTER TABLE contacts 
+                ADD COLUMN email TEXT
+            ''')
+            
+            # Добавляем столбец в таблицу registered_users
+            self.cursor.execute('''
+                ALTER TABLE registered_users 
+                ADD COLUMN email TEXT
+            ''')
+            
+            self.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Ошибка при добавлении столбца email: {e}")
+            return False 

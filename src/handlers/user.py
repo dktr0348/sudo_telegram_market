@@ -85,7 +85,7 @@ async def start_registration(message: Message, state: FSMContext, db: Database):
 async def reg_contact(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
     await state.set_state(Register.contact)
-    await message.answer('О��правьте контакт', reply_markup=send_contact)
+    await message.answer('Отправьте контакт', reply_markup=send_contact)
 
 @router.message(Register.contact, F.contact)
 async def reg_location(message: Message, state: FSMContext):
@@ -110,16 +110,15 @@ async def reg_email(message: Message, state: FSMContext):
 async def reg_no_location(message: Message):
     await message.answer('отправьте локацию через кнопку ниже')
 
-@router.message(Register.email, F.email)
+@router.message(Register.email)
 async def reg_age(message: Message, state: FSMContext):
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if re.math(email_pattern, message.text):
-        await state.update_data(email=message)
+    if re.match(email_pattern, message.text):
+        await state.update_data(email=message.text)
         await state.set_state(Register.age)
         await message.answer('Введите возраст', reply_markup=ReplyKeyboardRemove())
     else:
         await message.answer('Пожалуйста, введите корректный e-mail адрес.')
-
 
 @router.message(Register.age)
 async def reg_photo(message: Message, state: FSMContext):
@@ -139,6 +138,7 @@ async def confirm_registration(message: Message, state: FSMContext):
         "Пожалуйста, проверьте введенные данные:\n"
         f"Имя: {data['name']}\n"
         f"Телефон: {data['contact']}\n"
+        f"Email: {data['email']}\n"
         f"Возраст: {data['age']}\n"
         "Локация и фото получены\n\n"
         "Все верно?"
@@ -189,6 +189,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
                 user_id=message.from_user.id,
                 name=data['name'],
                 phone=data['contact'],
+                email=data['email'],
                 location_lat=data['location'][0],
                 location_lon=data['location'][1],
                 age=int(data['age']),
@@ -198,7 +199,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
             else:
                 await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
         except Exception as e:
-            logging.error(f"Ошибк при регистрации: {e}")
+            logging.error(f"Ошибка при регистрации: {e}")
             await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
         finally:
             await state.clear()
@@ -216,7 +217,7 @@ async def cmd_register(message: Message, state: FSMContext, db: Database):
     """Обработчик команды /register"""
     # Проверяем, не зарегистрирован ли уже пользователь
     if db.is_user_registered(message.from_user.id):
-        await message.answer("Вы уже зарегис��рированы!")
+        await message.answer("Вы уже зарегистрированы!")
         return
     
     # Начинаем процесс регистрации
