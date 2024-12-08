@@ -194,31 +194,75 @@ class Database:
     
     def get_user_profile(self, user_id: int):
         """Получение полного профиля пользователя"""
-        self.cursor.execute('''
-            SELECT ru.*, u.username 
-            FROM registered_users ru
-            JOIN users u ON ru.user_id = u.user_id
-            WHERE ru.user_id = ?
-        ''', (user_id,))
-        return self.cursor.fetchone()
+        try:
+            self.cursor.execute('''
+                SELECT 
+                    ru.user_id,
+                    ru.name,
+                    ru.phone_number,
+                    ru.email,
+                    ru.location_lat,
+                    ru.location_lon,
+                    ru.age,
+                    ru.photo_id,
+                    ru.registration_date,
+                    u.username
+                FROM registered_users ru
+                JOIN users u ON ru.user_id = u.user_id
+                WHERE ru.user_id = ?
+            ''', (user_id,))
+            return self.cursor.fetchone()
+        except sqlite3.Error as e:
+            logging.error(f"Ошибка при получении профиля пользователя {user_id}: {e}")
+            return None
     
     def add_email_column(self):
-        """Добавление столбца email в существующие таблицы"""
+        """Добавление столбца email в существующие таблицы, если он не существует"""
         try:
-            # Добавляем столбец в таблицу contacts
-            self.cursor.execute('''
-                ALTER TABLE contacts 
-                ADD COLUMN email TEXT
-            ''')
-            
-            # Добавляем столбец в таблицу registered_users
-            self.cursor.execute('''
-                ALTER TABLE registered_users 
-                ADD COLUMN email TEXT
-            ''')
-            
+        # Проверяем, существует ли столбец email в таблице contacts
+            self.cursor.execute("PRAGMA table_info(contacts);")
+            columns = [column[1] for column in self.cursor.fetchall()]
+            if 'email' not in columns:
+                self.cursor.execute('''ALTER TABLE contacts ADD COLUMN email TEXT;''')
+
+        # Проверяем, существует ли столбец email в таблице registered_users
+            self.cursor.execute("PRAGMA table_info(registered_users);")
+            columns = [column[1] for column in self.cursor.fetchall()]
+            if 'email' not in columns:
+                self.cursor.execute('''ALTER TABLE registered_users ADD COLUMN email TEXT;''')
+
             self.connection.commit()
             return True
         except sqlite3.Error as e:
             logging.error(f"Ошибка при добавлении столбца email: {e}")
+            return False
+    
+    def update_user_field(self, user_id: int, field: str, value: any) -> bool:
+        """Обновление отдельного поля в профиле пользователя"""
+        try:
+            # Формируем запрос динамически
+            query = f'''
+                UPDATE registered_users 
+                SET {field} = ?
+                WHERE user_id = ?
+            '''
+            self.cursor.execute(query, (value, user_id))
+            self.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Ошибка при обновлении поля {field}: {e}")
             return False 
+    
+    def clear_photo(self, user_id: int) -> bool:
+        """Очистка неверного photo_id"""
+        try:
+            self.cursor.execute('''
+                UPDATE registered_users 
+                SET photo_id = NULL
+                WHERE user_id = ?
+            ''', (user_id,))
+            self.connection.commit()
+            return True
+        except sqlite3.Error as e:
+            logging.error(f"Ошибка при очистке photo_id: {e}")
+            return False

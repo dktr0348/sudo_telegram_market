@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from ..database.database import Database
 from ..keyboards.keyboards import (main, cart_keyboard, main_command, menu_commands,
-                                 send_contact, send_location, catalog_builder)
+                                 send_contact, send_location, catalog_builder, profile_keyboard)
 from ..states.user import Register
 import logging
 import re
@@ -95,20 +95,12 @@ async def reg_location(message: Message, state: FSMContext):
                         reply_markup=send_location,
                         protect_content=True)
 
-@router.message(Register.contact)
-async def reg_no_contact(message: Message):
-    await message.answer('отправьте контакт через кнопку ниже')
-
 @router.message(Register.location, F.location)
 async def reg_email(message: Message, state: FSMContext):
     await state.update_data(location=[message.location.latitude,
                             message.location.longitude])
     await state.set_state(Register.email)
     await message.answer('Введите e-mail', reply_markup=ReplyKeyboardRemove())
-
-@router.message(Register.location)
-async def reg_no_location(message: Message):
-    await message.answer('отправьте локацию через кнопку ниже')
 
 @router.message(Register.email)
 async def reg_age(message: Message, state: FSMContext):
@@ -215,16 +207,16 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
 @router.message(Command("register"))
 async def cmd_register(message: Message, state: FSMContext, db: Database):
     """Обработчик команды /register"""
-    # Проверяем, не зарегистрирован ли уже пользователь
+   # ghjdthrf htubcnhfwbb
     if db.is_user_registered(message.from_user.id):
         await message.answer("Вы уже зарегистрированы!")
         return
     
-    # Начинаем процесс регистрации
+    # Начинаем процесс регистраци
     await state.set_state(Register.name)
     await message.answer('Введите ваше имя')
 
-# Остальные ваши обработчики... 
+
 
 @router.callback_query(F.data == 'back')
 async def back_to_menu(callback: CallbackQuery):
@@ -233,3 +225,64 @@ async def back_to_menu(callback: CallbackQuery):
         'Вы вернулись в главное меню',
         reply_markup=main
     )
+
+@router.message(Command("profile"))
+async def cmd_profile(message: Message, db: Database):
+    """Показ профиля пользователя"""
+    logging.info(f"Получен запрос на профиль от пользователя {message.from_user.id}")
+    try:
+        user_data = db.get_user_profile(message.from_user.id)
+        logging.info(f"Получены данные профиля: {user_data}")
+        
+        if not user_data:
+            await message.answer(
+                "Вы не зарегистрированы. Используйте /register для регистрации.",
+                reply_markup=main
+            )
+            return
+
+        # Распаковываем данные из БД в именованные переменные
+        (user_id, name, phone, email, lat, lon, 
+         age, photo_id, reg_date, username) = user_data
+        
+        # Форматируем дату регистрации
+        reg_date_formatted = reg_date.split('.')[0] if reg_date else 'Не указана'
+        
+        # Форматируем локацию
+        location = f"📍 {lat}, {lon}" if lat and lon else "Не указана"
+        
+        # Формируем текст профиля с проверкой на None
+        profile_text = (
+            f"👤 Профиль пользователя\n\n"
+            f"Имя: {name or 'Не указано'}\n"
+            f"Email: {email or 'Не указан'}\n"
+            f"Телефон: {phone or 'Не указан'}\n"
+            f"Возраст: {age or 'Не указан'}\n"
+            f"Локация: {location}\n"
+            f"Дата регистрации: {reg_date_formatted}\n"
+            f"Username: @{username or 'Не указан'}"
+        )
+        
+        try:
+            if photo_id:
+                await message.answer_photo(
+                    photo=photo_id,
+                    caption=profile_text,
+                    reply_markup=profile_keyboard
+                )
+            else:
+                await message.answer(
+                    profile_text,
+                    reply_markup=profile_keyboard
+                )
+        except Exception as photo_error:
+            logging.error(f"Ошибка при отправке фото: {photo_error}")
+            db.clear_photo(message.from_user.id)
+            await message.answer(
+                profile_text,
+                reply_markup=profile_keyboard
+            )
+            
+    except Exception as e:
+        logging.error(f"Ошибка при получении профиля: {e}")
+        await message.answer("Произошла ошибка при получении профиля. Попробуйте позже.")

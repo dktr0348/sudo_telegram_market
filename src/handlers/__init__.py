@@ -1,1 +1,1 @@
-from . import user, admin, errors 
+from . import user, admin, errors, edit_profile 

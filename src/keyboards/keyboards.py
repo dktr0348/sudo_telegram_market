@@ -78,3 +78,25 @@ menu_commands = ReplyKeyboardMarkup(keyboard=[
     ],
     [KeyboardButton(text='В главное меню')]
 ], resize_keyboard=True)
+
+# Клавиатура для отмены действия
+cancel_kb = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="Отменить редактирование")]
+], resize_keyboard=True)
+
+# Клавиатура для профиля
+profile_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text='✏️ Изменить имя', callback_data='edit_name'),
+        InlineKeyboardButton(text='✉️ Изменить email', callback_data='edit_email')
+    ],
+    [
+        InlineKeyboardButton(text='📱 Изменить телефон', callback_data='edit_phone'),
+        InlineKeyboardButton(text='🔢 Изменить возраст', callback_data='edit_age')
+    ],
+    [
+        InlineKeyboardButton(text='📷 Изменить фото', callback_data='edit_photo'),
+        InlineKeyboardButton(text='📍 Изменить локацию', callback_data='edit_location')
+    ],
+    [InlineKeyboardButton(text='◀️ Назад', callback_data='back')]
+])
