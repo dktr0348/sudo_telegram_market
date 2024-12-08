@@ -11,10 +11,7 @@ main = ReplyKeyboardMarkup(keyboard=[
         KeyboardButton(text='Каталог'),
         KeyboardButton(text='Корзина')
     ],
-    [
-        KeyboardButton(text='Поделиться контактом'),
-        KeyboardButton(text='Поделиться локацией')
-    ],
+    
     [KeyboardButton(text='В главное меню')]
 ], resize_keyboard=True)
 
@@ -57,9 +54,26 @@ async def catalog_builder():
     return catalog_kb
 
 send_contact = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='отправить контакт', request_contact=True)]
+    [KeyboardButton(text='Отправить номер телефона', request_contact=True)],
+    [KeyboardButton(text='Отмена регистрации')]
 ], resize_keyboard=True)
 
 send_location = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='отправить локацию', request_location=True)]
+    [KeyboardButton(text='Отправить местоположение', request_location=True)],
+    [KeyboardButton(text='Отмена регистрации')]
+], resize_keyboard=True)
+
+# Клавиатура для меню команд
+menu_commands = ReplyKeyboardMarkup(keyboard=[
+    [
+        KeyboardButton(text='/start'),
+        KeyboardButton(text='/menu'),
+        KeyboardButton(text='/help')
+    ],
+    [
+        KeyboardButton(text='/profile'),
+        KeyboardButton(text='/settings'),
+        KeyboardButton(text='/register')
+    ],
+    [KeyboardButton(text='В главное меню')]
 ], resize_keyboard=True)

@@ -1,27 +1,37 @@
 import asyncio
-from aiogram import Dispatcher, Bot
-from handlers import router
-from bot_commands import set_commands
-from database import Database
-from middleware import DatabaseMiddleware
+import logging
+import os
+from pathlib import Path
+from aiogram import Bot, Dispatcher
+from src.config.config import load_config
+from src.database.database import Database
+from src.middlewares.database import DatabaseMiddleware
+from src.handlers import user, admin, errors
+
+# Получаем путь к корневой директории проекта
+BASE_DIR = Path(__file__).parent
 
 async def main():
-    bot = Bot(token='7188432169:AAHKMW8XYbf9PSFQ_PmzmXcbwfSM0uPtTgc')
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    )
+
+    config = load_config()
+    
+    # Создаем путь к файлу БД относительно корневой директории
+    db_path = BASE_DIR / config.database_path
+    
+    bot = Bot(token=config.token)
     dp = Dispatcher()
     
-    # Инициализация базы данных
-    db = Database('bot_database.db')
+    db = Database(str(db_path))
+    dp.update.middleware(DatabaseMiddleware(db))
     
-    # Регистрация middleware
-    dp.message.middleware(DatabaseMiddleware(db))
+    dp.include_router(user.router)
+    dp.include_router(admin.router)
+    dp.include_router(errors.router)
     
-    # Регистрация роутера
-    dp.include_router(router)
-    
-    # Установка команд бота
-    await set_commands(bot)
-    
-    # Запуск бота
     try:
         await dp.start_polling(bot)
     finally:
@@ -29,4 +39,7 @@ async def main():
         db.close()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен")

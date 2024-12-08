@@ -1,10 +1,21 @@
 import sqlite3
+import logging
+import os
 
 class Database:
     def __init__(self, db_file):
-        self.connection = sqlite3.connect(db_file)
-        self.cursor = self.connection.cursor()
-        self.create_tables()
+        # Убедимся, что путь существует
+        db_dir = os.path.dirname(db_file)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir)
+            
+        try:
+            self.connection = sqlite3.connect(db_file)
+            self.cursor = self.connection.cursor()
+            self.create_tables()
+        except sqlite3.Error as e:
+            logging.error(f"Ошибка при подключении к БД: {e}")
+            raise
     
     def create_tables(self):
         """Создание необходимых таблиц при первом запуске"""
@@ -165,7 +176,8 @@ class Database:
             ''', (user_id, name, phone, location_lat, location_lon, age, photo_id))
             self.connection.commit()
             return True
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            logging.error(f"Ошибка при регистрации пользователя {user_id}: {e}")
             return False
     
     def is_user_registered(self, user_id: int) -> bool:

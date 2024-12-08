@@ -1,9 +1,10 @@
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message
+from ..database.database import Database
 
 class DatabaseMiddleware(BaseMiddleware):
-    def __init__(self, db_session):
+    def __init__(self, db_session: Database):
         self.db_session = db_session
         super().__init__()
 

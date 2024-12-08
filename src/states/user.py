@@ -6,3 +6,4 @@ class Register(StatesGroup):
     location = State()
     age = State()
     photo = State()
+    confirm = State() 
