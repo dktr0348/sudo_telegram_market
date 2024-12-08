@@ -7,6 +7,7 @@ from ..keyboards.keyboards import (main, cart_keyboard, main_command, menu_comma
                                  send_contact, send_location, catalog_builder)
 from ..states.user import Register
 import logging
+import re
 
 router = Router()
 
@@ -99,15 +100,26 @@ async def reg_no_contact(message: Message):
     await message.answer('отправьте контакт через кнопку ниже')
 
 @router.message(Register.location, F.location)
-async def reg_age(message: Message, state: FSMContext):
+async def reg_email(message: Message, state: FSMContext):
     await state.update_data(location=[message.location.latitude,
                             message.location.longitude])
-    await state.set_state(Register.age)
-    await message.answer('Введите возраст', reply_markup=ReplyKeyboardRemove())
+    await state.set_state(Register.email)
+    await message.answer('Введите e-mail', reply_markup=ReplyKeyboardRemove())
 
 @router.message(Register.location)
 async def reg_no_location(message: Message):
     await message.answer('отправьте локацию через кнопку ниже')
+
+@router.message(Register.email, F.email)
+async def reg_age(message: Message, state: FSMContext):
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if re.math(email_pattern, message.text):
+        await state.update_data(email=message)
+        await state.set_state(Register.age)
+        await message.answer('Введите возраст', reply_markup=ReplyKeyboardRemove())
+    else:
+        await message.answer('Пожалуйста, введите корректный e-mail адрес.')
+
 
 @router.message(Register.age)
 async def reg_photo(message: Message, state: FSMContext):

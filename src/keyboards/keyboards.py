@@ -53,6 +53,7 @@ async def catalog_builder():
 
     return catalog_kb
 
+
 send_contact = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='Отправить номер телефона', request_contact=True)],
     [KeyboardButton(text='Отмена регистрации')]
