@@ -86,7 +86,7 @@ async def process_name(message: Message, state: FSMContext, db: Database):
         await cancel_edit(message, state, db)
         return
         
-    if db.update_user_field(message.from_user.id, 'name', message.text):
+    if await db.update_user_field(message.from_user.id, 'name', message.text):
         await message.answer('Имя успешно обновлено!', reply_markup=main)
         await cmd_profile(message, db)
     else:
@@ -105,7 +105,7 @@ async def process_email(message: Message, state: FSMContext, db: Database):
 
     email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     if re.match(email_pattern, message.text):
-        if db.update_user_field(message.from_user.id, 'email', message.text):
+        if await db.update_user_field(message.from_user.id, 'email', message.text):
             await message.answer('Email успешно обновлен!', reply_markup=main)
             await cmd_profile(message, db)
         else:
@@ -126,7 +126,7 @@ async def process_age(message: Message, state: FSMContext, db: Database):
         return
 
     if message.text.isdigit():
-        if db.update_user_field(message.from_user.id, 'age', int(message.text)):
+        if await db.update_user_field(message.from_user.id, 'age', int(message.text)):
             await message.answer('Возраст успешно обновлен!', reply_markup=main)
             await cmd_profile(message, db)
         else:
@@ -142,7 +142,7 @@ async def process_photo(message: Message, state: FSMContext, db: Database):
     if not data.get('edit_mode'):
         return
         
-    if db.update_user_field(message.from_user.id, 'photo_id', message.photo[-1].file_id):
+    if await db.update_user_field(message.from_user.id, 'photo_id', message.photo[-1].file_id):
         await message.answer('Фото успешно обновлено!', reply_markup=main)
         await cmd_profile(message, db)
     else:
@@ -155,7 +155,7 @@ async def process_contact(message: Message, state: FSMContext, db: Database):
     if not data.get('edit_mode'):
         return
         
-    if db.update_user_field(message.from_user.id, 'phone_number', message.contact.phone_number):
+    if await db.update_user_field(message.from_user.id, 'phone_number', message.contact.phone_number):
         await message.answer('Номер телефона успешно обновлен!', reply_markup=main)
         await cmd_profile(message, db)
     else:
@@ -169,8 +169,8 @@ async def process_location(message: Message, state: FSMContext, db: Database):
         return
         
     try:
-        if (db.update_user_field(message.from_user.id, 'location_lat', message.location.latitude) and
-            db.update_user_field(message.from_user.id, 'location_lon', message.location.longitude)):
+        if (await db.update_user_field(message.from_user.id, 'location_lat', message.location.latitude) and
+            await db.update_user_field(message.from_user.id, 'location_lon', message.location.longitude)):
             await message.answer('Локация успешно обновлена!', reply_markup=main)
             await cmd_profile(message, db)
         else:

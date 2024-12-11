@@ -23,7 +23,7 @@ async def send_with_inline_kb(message: Message, text: str, inline_kb: InlineKeyb
 async def cmd_start(message: Message, db: Database):
     if isinstance(message, Message):
         user = message.from_user
-        db.add_user(
+        await db.add_user(
             user_id=user.id,
             username=user.username,
             first_name=user.first_name
@@ -35,7 +35,7 @@ async def cmd_start(message: Message, db: Database):
 
 @router.message(F.text == "Корзина")
 async def show_cart(message: Message, db: Database):
-    cart_items = db.get_cart(message.from_user.id)
+    cart_items = await db.get_cart(message.from_user.id)
     if not cart_items:
         await message.answer("Ваша корзина пуста")
         return
@@ -74,8 +74,8 @@ async def show_catalog(callback: CallbackQuery):
 # Регистрация
 @router.message(F.text == "Регистрация")
 async def start_registration(message: Message, state: FSMContext, db: Database):
-    if db.is_user_registered(message.from_user.id):
-        await message.answer("Вы уже зарегистриованы!")
+    if await db.is_user_registered(message.from_user.id):
+        await message.answer("Вы уже зарегистрированы!")
         return
     
     await state.set_state(Register.name)
@@ -177,7 +177,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
     if message.text == "Подтвердить":
         data = await state.get_data()
         try:
-            if db.register_user(
+            if await db.register_user(
                 user_id=message.from_user.id,
                 name=data['name'],
                 phone=data['contact'],
@@ -231,7 +231,7 @@ async def cmd_profile(message: Message, db: Database):
     """Показ профиля пользователя"""
     logging.info(f"Получен запрос на профиль от пользователя {message.from_user.id}")
     try:
-        user_data = db.get_user_profile(message.from_user.id)
+        user_data = await db.get_user_profile(message.from_user.id)
         logging.info(f"Получены данные профиля: {user_data}")
         
         if not user_data:
