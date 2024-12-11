@@ -241,48 +241,51 @@ async def cmd_profile(message: Message, db: Database):
             )
             return
 
-        # Распаковываем данные из БД в именованные переменные
+        # Распаковываем данные из БД
         (user_id, name, phone, email, lat, lon, 
          age, photo_id, reg_date, username) = user_data
         
         # Форматируем дату регистрации
         reg_date_formatted = reg_date.split('.')[0] if reg_date else 'Не указана'
         
-        # Форматируем локацию
-        location = f"📍 {lat}, {lon}" if lat and lon else "Не указана"
-        
-        # Формируем текст профиля с проверкой на None
+        # Формируем текст профиля
         profile_text = (
-            f"👤 Профиль пользователя\n\n"
-            f"Имя: {name or 'Не указано'}\n"
-            f"Email: {email or 'Не указан'}\n"
-            f"Телефон: {phone or 'Не указан'}\n"
-            f"Возраст: {age or 'Не указан'}\n"
-            f"Локация: {location}\n"
-            f"Дата регистрации: {reg_date_formatted}\n"
-            f"Username: @{username or 'Не указан'}"
+            f"👤 <b>Ваш профиль</b>\n\n"
+            f"📝 Имя: {name or 'Не указано'}\n"
+            f"📱 Телефон: {phone or 'Не указан'}\n"
+            f"📧 Email: {email or 'Не указан'}\n"
+            f"🎂 Возраст: {age or 'Не указан'}\n"
+            f"📍 Локация: {'Указана' if lat and lon else 'Не указана'}\n"
+            f"📅 Дата регистрации: {reg_date_formatted}\n"
+            f"🆔 Username: @{username or 'Не указан'}"
         )
         
-        try:
-            if photo_id:
+        # Отправляем фото профиля с информацией, если оно есть
+        if photo_id:
+            try:
                 await message.answer_photo(
                     photo=photo_id,
                     caption=profile_text,
+                    parse_mode="HTML",
                     reply_markup=profile_keyboard
                 )
-            else:
+            except Exception as e:
+                logging.error(f"Ошибка при отправке фото профиля: {e}")
                 await message.answer(
                     profile_text,
+                    parse_mode="HTML",
                     reply_markup=profile_keyboard
                 )
-        except Exception as photo_error:
-            logging.error(f"Ошибка при отправке фото: {photo_error}")
-            db.clear_photo(message.from_user.id)
+        else:
             await message.answer(
                 profile_text,
+                parse_mode="HTML",
                 reply_markup=profile_keyboard
             )
             
     except Exception as e:
-        logging.error(f"Ошибка при получении профиля: {e}")
-        await message.answer("Произошла ошибка при получении профиля. Попробуйте позже.")
+        logging.error(f"Ошибка при отображении профиля: {e}")
+        await message.answer(
+            "Произошла ошибка при загрузке профиля. Попробуйте позже.",
+            reply_markup=main
+        )
