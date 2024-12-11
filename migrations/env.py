@@ -68,4 +68,4 @@ def do_run_migrations(connection: Connection) -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online()) 
+    asyncio.run(run_migrations_online())

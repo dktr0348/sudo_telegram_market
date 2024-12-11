@@ -7,4 +7,13 @@ class Register(StatesGroup):
     location = State()
     age = State()
     photo = State()
+    confirm = State()
+
+class EditProfile(StatesGroup):
+    edit_name = State()
+    edit_contact = State()
+    edit_email = State()
+    edit_location = State()
+    edit_age = State()
+    edit_photo = State()
     confirm = State() 

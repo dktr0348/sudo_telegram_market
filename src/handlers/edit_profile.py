@@ -7,7 +7,7 @@ import logging
 from ..database.database import Database
 from ..keyboards.keyboards import (profile_keyboard, send_contact, 
                                  send_location, main)
-from ..states.user import Register
+from ..states.user import EditProfile
 from .user import cmd_profile
 
 router = Router()
@@ -15,6 +15,15 @@ router = Router()
 # Клавиатура для отмены редактирования
 cancel_kb = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="Отменить редактирование")]],
+    resize_keyboard=True
+)
+
+# Клавиатура для подтверждения
+confirm_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Подтвердить")],
+        [KeyboardButton(text="Отменить редактирование")]
+    ],
     resize_keyboard=True
 )
 
@@ -32,12 +41,12 @@ async def process_edit_profile(callback: CallbackQuery, state: FSMContext):
     }
     
     states = {
-        'name': Register.name,
-        'email': Register.email,
-        'phone': Register.contact,
-        'age': Register.age,
-        'photo': Register.photo,
-        'location': Register.location
+        'name': EditProfile.edit_name,
+        'email': EditProfile.edit_email,
+        'phone': EditProfile.edit_contact,
+        'age': EditProfile.edit_age,
+        'photo': EditProfile.edit_photo,
+        'location': EditProfile.edit_location
     }
     
     await state.set_state(states[edit_type])
@@ -63,122 +72,115 @@ async def cancel_edit(message: Message, state: FSMContext, db: Database):
     await message.answer("Редактирование отменено", reply_markup=main)
     await cmd_profile(message, db)
 
-# Обработчики неправильных типов сообщений
-@router.message(Register.photo)
-async def wrong_photo(message: Message):
-    await message.answer("Пожалуйста, отправьте фото", reply_markup=cancel_kb)
-
-@router.message(Register.contact)
-async def wrong_contact(message: Message):
-    await message.answer("Пожалуйста, используйте кнопку для отправки контакта", reply_markup=send_contact)
-
-@router.message(Register.location)
-async def wrong_location(message: Message):
-    await message.answer("Пожалуйста, используйте кнопку для отправки локации", reply_markup=send_location)
-
-@router.message(Register.name)
-async def process_name(message: Message, state: FSMContext, db: Database):
+# Обработчик подтверждения изменений
+@router.message(F.text == "Подтвердить")
+async def confirm_edit(message: Message, state: FSMContext, db: Database):
     data = await state.get_data()
     if not data.get('edit_mode'):
         return
-        
-    if message.text == "Отменить редактирование":
-        await cancel_edit(message, state, db)
-        return
-        
-    if await db.update_user_field(message.from_user.id, 'name', message.text):
-        await message.answer('Имя успешно обновлено!', reply_markup=main)
-        await cmd_profile(message, db)
-    else:
-        await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
-    await state.clear()
-
-@router.message(Register.email)
-async def process_email(message: Message, state: FSMContext, db: Database):
-    data = await state.get_data()
-    if not data.get('edit_mode'):
-        return
-        
-    if message.text == "Отменить редактирование":
-        await cancel_edit(message, state, db)
-        return
-
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if re.match(email_pattern, message.text):
-        if await db.update_user_field(message.from_user.id, 'email', message.text):
-            await message.answer('Email успешно обновлен!', reply_markup=main)
-            await cmd_profile(message, db)
-        else:
-            await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
-    else:
-        await message.answer('Пожалуйста, введите корректный email адрес.', reply_markup=cancel_kb)
-        return
-    await state.clear()
-
-@router.message(Register.age)
-async def process_age(message: Message, state: FSMContext, db: Database):
-    data = await state.get_data()
-    if not data.get('edit_mode'):
-        return
-        
-    if message.text == "Отменить редактирование":
-        await cancel_edit(message, state, db)
-        return
-
-    if message.text.isdigit():
-        if await db.update_user_field(message.from_user.id, 'age', int(message.text)):
-            await message.answer('Возраст успешно обновлен!', reply_markup=main)
-            await cmd_profile(message, db)
-        else:
-            await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
-    else:
-        await message.answer('Пожалуйста, введите корректный возраст (целое число).', reply_markup=cancel_kb)
-        return
-    await state.clear()
-
-@router.message(Register.photo, F.photo)
-async def process_photo(message: Message, state: FSMContext, db: Database):
-    data = await state.get_data()
-    if not data.get('edit_mode'):
-        return
-        
-    if await db.update_user_field(message.from_user.id, 'photo_id', message.photo[-1].file_id):
-        await message.answer('Фото успешно обновлено!', reply_markup=main)
-        await cmd_profile(message, db)
-    else:
-        await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
-    await state.clear()
-
-@router.message(Register.contact, F.contact)
-async def process_contact(message: Message, state: FSMContext, db: Database):
-    data = await state.get_data()
-    if not data.get('edit_mode'):
-        return
-        
-    if await db.update_user_field(message.from_user.id, 'phone_number', message.contact.phone_number):
-        await message.answer('Номер телефона успешно обновлен!', reply_markup=main)
-        await cmd_profile(message, db)
-    else:
-        await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
-    await state.clear()
-
-@router.message(Register.location, F.location)
-async def process_location(message: Message, state: FSMContext, db: Database):
-    data = await state.get_data()
-    if not data.get('edit_mode'):
-        return
-        
+    
+    edit_type = data.get('edit_type')
+    new_value = data.get('new_value')
+    
+    field_mapping = {
+        'name': 'name',
+        'email': 'email',
+        'phone': 'phone_number',
+        'age': 'age',
+        'photo': 'photo_id'
+    }
+    
     try:
-        if (await db.update_user_field(message.from_user.id, 'location_lat', message.location.latitude) and
-            await db.update_user_field(message.from_user.id, 'location_lon', message.location.longitude)):
-            await message.answer('Локация успешно обновлена!', reply_markup=main)
+        if edit_type == 'location':
+            lat = data.get('new_value_lat')
+            lon = data.get('new_value_lon')
+            success = await db.update_user_field(message.from_user.id, 'location_lat', lat)
+            success = success and await db.update_user_field(message.from_user.id, 'location_lon', lon)
+        elif edit_type in field_mapping:
+            success = await db.update_user_field(message.from_user.id, field_mapping[edit_type], new_value)
+        
+        if success:
+            await message.answer(f'{edit_type.capitalize()} успешно обновлен!', reply_markup=main)
             await cmd_profile(message, db)
         else:
             await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
     except Exception as e:
-        logging.error(f"Ошибка при обновлении локации: {e}")
+        logging.error(f"Ошибка при обновлении: {e}")
         await message.answer('Произошла ошибка при обновлении.', reply_markup=main)
-    await state.clear()
+    finally:
+        await state.clear()
+
+# Обработчики неправильных типов сообщений
+@router.message(EditProfile.edit_photo)
+async def wrong_photo(message: Message):
+    if not message.photo:
+        await message.answer("Пожалуйста, отправьте фото", reply_markup=cancel_kb)
+
+@router.message(EditProfile.edit_contact)
+async def wrong_contact(message: Message):
+    if not message.contact:
+        await message.answer("Пожалуйста, используйте кнопку для отправки контакта", reply_markup=send_contact)
+
+@router.message(EditProfile.edit_location)
+async def wrong_location(message: Message):
+    if not message.location:
+        await message.answer("Пожалуйста, используйте кнопку для отправки локации", reply_markup=send_location)
+
+@router.message(EditProfile.edit_name)
+async def process_name(message: Message, state: FSMContext):
+    if message.text == "Отменить редактирование":
+        await cancel_edit(message, state)
+        return
+    
+    await state.update_data(new_value=message.text)
+    await message.answer(f'Вы хотите изменить имя на "{message.text}"?', reply_markup=confirm_kb)
+
+@router.message(EditProfile.edit_email)
+async def process_email(message: Message, state: FSMContext):
+    if message.text == "Отменить редактирование":
+        await cancel_edit(message, state)
+        return
+
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if re.match(email_pattern, message.text):
+        await state.update_data(new_value=message.text)
+        await message.answer(f'Вы хотите изменить email на "{message.text}"?', reply_markup=confirm_kb)
+    else:
+        await message.answer('Пожалуйста, введите корректный email адрес.', reply_markup=cancel_kb)
+
+@router.message(EditProfile.edit_age)
+async def process_age(message: Message, state: FSMContext):
+    if message.text == "Отменить редактирование":
+        await cancel_edit(message, state)
+        return
+
+    if message.text.isdigit():
+        await state.update_data(new_value=int(message.text))
+        await message.answer(f'Вы хотите изменить возраст на {message.text}?', reply_markup=confirm_kb)
+    else:
+        await message.answer('Пожалуйста, введите корректный возраст (целое число).', reply_markup=cancel_kb)
+
+@router.message(EditProfile.edit_photo, F.photo)
+async def process_photo(message: Message, state: FSMContext):
+    await state.update_data(new_value=message.photo[-1].file_id)
+    await message.answer('Вы хотите установить это фото?', reply_markup=confirm_kb)
+
+@router.message(EditProfile.edit_contact, F.contact)
+async def process_contact(message: Message, state: FSMContext):
+    await state.update_data(new_value=message.contact.phone_number)
+    await message.answer(f'Вы хотите изменить номер телефона на {message.contact.phone_number}?', reply_markup=confirm_kb)
+
+@router.message(EditProfile.edit_location, F.location)
+async def process_location(message: Message, state: FSMContext):
+    try:
+        await state.update_data(
+            new_value_lat=message.location.latitude,
+            new_value_lon=message.location.longitude
+        )
+        await message.answer('Вы хотите установить эту локацию?', reply_markup=confirm_kb)
+    except Exception as e:
+        logging.error(f"Ошибка при обработке локации: {e}")
+        await message.answer('Произошла ошибка при обработке локации.', reply_markup=main)
 
 @router.callback_query(F.data == "back")
 async def back_to_profile(callback: CallbackQuery, db: Database):

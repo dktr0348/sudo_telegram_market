@@ -153,7 +153,7 @@ async def reg_no_photo(message: Message):
 
 @router.message(F.text == "Авторизация")
 async def authorization(message: Message, db: Database):
-    if db.is_user_registered(message.from_user.id):
+    if await db.is_user_registered(message.from_user.id):
         await message.answer("Вы успешно авторизованы!")
     else:
         await message.answer("Вы не зарегистрированы. Пожалуйста, сначала пройдите регистрацию.", 
@@ -207,16 +207,13 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
 @router.message(Command("register"))
 async def cmd_register(message: Message, state: FSMContext, db: Database):
     """Обработчик команды /register"""
-   # ghjdthrf htubcnhfwbb
-    if db.is_user_registered(message.from_user.id):
+    if await db.is_user_registered(message.from_user.id):
         await message.answer("Вы уже зарегистрированы!")
         return
     
-    # Начинаем процесс регистраци
+    # Начинаем процесс регистрации
     await state.set_state(Register.name)
     await message.answer('Введите ваше имя')
-
-
 
 @router.callback_query(F.data == 'back')
 async def back_to_menu(callback: CallbackQuery):

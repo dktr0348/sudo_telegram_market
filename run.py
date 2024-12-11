@@ -26,6 +26,7 @@ async def main():
     dp = Dispatcher()
     
     db = Database(str(db_path))
+    await db.init_db()  # Инициализируем базу данных
     dp.update.middleware(DatabaseMiddleware(db))
     
     dp.include_router(user.router)
@@ -37,7 +38,7 @@ async def main():
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
-        db.close()
+        await db.close()
 
 if __name__ == '__main__':
     try:
