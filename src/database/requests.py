@@ -1,15 +1,23 @@
 from .models import async_session
 from .models import User, UserProfile, Category, Product, Cart
 from sqlalchemy import select, insert, update, delete
+import functools
 
-async def get_categories():
-    async with async_session() as session:
-        return await session.scalars(select(Category))
+def connection(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        async with async_session() as session:
+            return await func(session, *args, **kwargs)
+    return wrapper
 
-async def get_products_by_category(category_id: int):
-    async with async_session() as session:
-        return await session.scalars(select(Product).where(Product.category_id == category_id))
+@connection
+async def get_categories(session):
+    return await session.scalars(select(Category))
 
-async def get_product_by_id(product_id: int):
-    async with async_session() as session:
-        return await session.scalar(select(Product).where(Product.product_id == product_id))
+@connection
+async def get_products_by_category(session, category_id: int):
+    return await session.scalars(select(Product).where(Product.category_id == category_id))
+
+@connection
+async def get_product_by_id(session, product_id: int):
+    return await session.scalar(select(Product).where(Product.product_id == product_id))
