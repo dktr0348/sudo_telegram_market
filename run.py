@@ -3,7 +3,7 @@ import logging
 import os
 from pathlib import Path
 from aiogram import Bot, Dispatcher
-from src.config.config import load_config
+from src.config import load_config
 from src.database.database import Database
 from src.middlewares.database import DatabaseMiddleware
 from src.handlers import user, admin, errors, edit_profile
@@ -27,6 +27,7 @@ async def main():
     
     db = Database(str(db_path))
     await db.init_db()  # Инициализируем базу данных
+    
     dp.update.middleware(DatabaseMiddleware(db))
     
     dp.include_router(user.router)

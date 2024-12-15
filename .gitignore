@@ -12,4 +12,10 @@ ENV/
 
 # IDE
 .idea/
-.vscode/ 
+.vscode/
+
+# Package installation
+*.egg-info/
+dist/
+build/
+setup.py 

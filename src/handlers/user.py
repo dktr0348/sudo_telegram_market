@@ -1,11 +1,15 @@
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (Message, CallbackQuery, ReplyKeyboardRemove,
+                            ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup,
+                            InlineKeyboardButton)
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from ..database.database import Database
-from ..keyboards.keyboards import (main, cart_keyboard, main_command, menu_commands,
-                                 send_contact, send_location, catalog_builder, profile_keyboard)
-from ..states.user import Register
+from ..keyboards import (main, cart_keyboard, main_command, menu_commands,
+                                 send_contact, send_location, categories,
+                                 category_products, profile_keyboard)
+from ..state import Register
+from ..database import requests as db
 import logging
 import re
 
@@ -63,13 +67,66 @@ async def back_to_main_menu(message: Message):
 
 @router.message(F.text == 'Каталог')
 async def catalog(message: Message):
-    await send_with_inline_kb(message, 'Выбрать товар', await catalog_builder())
+    keyboard = await categories()
+    if keyboard:
+        await message.answer(
+            text='Выберите категорию:',
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("К сожалению, категории сейчас недоступны")
 
-@router.callback_query(F.data.startswith('catalog_'))
-async def show_catalog(callback: CallbackQuery):
-    await callback.answer('вы выбрали товар')
-    await callback.message.answer(f'вы выбрали {callback.data}',
-                                reply_markup=ReplyKeyboardRemove())
+@router.callback_query(F.data.startswith('category_'))
+async def show_category_products(callback: CallbackQuery):
+    category_id = int(callback.data.split('_')[1])
+    keyboard = await category_products(category_id)
+    if keyboard:
+        await callback.message.edit_text(
+            text='Выберите товар:',
+            reply_markup=keyboard
+        )
+    else:
+        await callback.answer("В этой категории пока нет товаров")
+
+@router.callback_query(F.data.startswith('product_'))
+async def show_product_details(callback: CallbackQuery):
+    product_id = int(callback.data.split('_')[1])
+    product = await db.get_product_by_id(product_id)
+    
+    if product:
+        text = (
+            f"📦 <b>{product.name}</b>\n\n"
+            f"📝 {product.description}\n\n"
+            f"💰 Цена: {product.price}₽"
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="🛒 Добавить в корзину", 
+                    callback_data=f"add_to_cart_{product_id}")],
+                [InlineKeyboardButton(
+                    text="◀️ Назад к категориям", 
+                    callback_data="back_to_categories")]
+            ]
+        )
+        await callback.message.edit_text(
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    else:
+        await callback.answer("Товар не найден")
+
+@router.callback_query(F.data == "back_to_categories")
+async def back_to_categories(callback: CallbackQuery):
+    keyboard = await categories()
+    if keyboard:
+        await callback.message.edit_text(
+            text='Выберите категорию:',
+            reply_markup=keyboard
+        )
+    else:
+        await callback.answer("Категории недоступны")
 
 # Регистрация
 @router.message(F.text == "Регистрация")

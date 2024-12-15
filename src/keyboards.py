@@ -1,6 +1,8 @@
 from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton, 
                           InlineKeyboardMarkup, InlineKeyboardButton)
-
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+import src.database.requests as db
+import logging
 # Главное меню
 main = ReplyKeyboardMarkup(keyboard=[
     [
@@ -100,3 +102,61 @@ profile_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     ],
     [InlineKeyboardButton(text='◀️ Назад', callback_data='back')]
 ])
+
+# Клавиатура для выбора категории
+async def categories():
+    try:
+        all_categories = await db.get_categories()
+        categories_list = [cat for cat in all_categories]
+        
+        keyboard = InlineKeyboardBuilder()
+        
+        if not categories_list:
+            keyboard.add(InlineKeyboardButton(
+                text="🏠 В главное меню",
+                callback_data="back"
+            ))
+        else:
+            for category in categories_list:
+                keyboard.add(InlineKeyboardButton(
+                    text=category.name,
+                    callback_data=f'category_{category.id}'
+                ))
+            keyboard.add(InlineKeyboardButton(
+                text="🏠 В главное меню",
+                callback_data="back"
+            ))
+        
+        return keyboard.adjust(2).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры категорий: {e}")
+        return None
+
+# Клавиатура для выбора продукта
+async def category_products(category_id: int):
+    try:
+        all_products = await db.get_products_by_category(category_id)
+        products_list = [prod for prod in all_products]
+        
+        keyboard = InlineKeyboardBuilder()
+        
+        if not products_list:
+            keyboard.add(InlineKeyboardButton(
+                text="◀️ Назад к категориям",
+                callback_data="back_to_categories"
+            ))
+        else:
+            for product in products_list:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"{product.name} - {product.price}₽",
+                    callback_data=f'product_{product.product_id}'
+                ))
+            keyboard.add(InlineKeyboardButton(
+                text="◀️ Назад к категориям",
+                callback_data="back_to_categories"
+            ))
+        
+        return keyboard.adjust(2).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры продуктов: {e}")
+        return None

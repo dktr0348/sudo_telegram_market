@@ -5,9 +5,9 @@ from aiogram.fsm.context import FSMContext
 import re
 import logging
 from ..database.database import Database
-from ..keyboards.keyboards import (profile_keyboard, send_contact, 
+from ..keyboards import (profile_keyboard, send_contact, 
                                  send_location, main)
-from ..states.user import EditProfile
+from ..state import EditProfile
 from .user import cmd_profile
 
 router = Router()
