@@ -16,4 +16,24 @@ class EditProfile(StatesGroup):
     edit_location = State()
     edit_age = State()
     edit_photo = State()
-    confirm = State() 
+    confirm = State()
+
+class AddCategory(StatesGroup):
+    name = State()
+    confirm = State()
+   
+
+class DeleteCategory(StatesGroup):
+    select = State()
+    confirm = State()
+   
+class AddProduct(StatesGroup):
+    category = State()
+    name = State()
+    description = State()
+    price = State()
+    confirm = State()
+   
+class DeleteProduct(StatesGroup):
+    select = State()
+    confirm = State()

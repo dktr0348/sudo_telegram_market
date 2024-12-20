@@ -21,14 +21,13 @@ class User(Base):
     registration_date = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
     
-    # Отношения
-    profile = relationship("UserProfile", back_populates="user", uselist=False)
-    cart_items = relationship("Cart", back_populates="user")
+    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete")
+    cart_items = relationship("Cart", back_populates="user", cascade="all, delete")
 
 class UserProfile(Base):
     __tablename__ = 'user_profiles'
     
-    user_id = Column(Integer, ForeignKey('users.user_id'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'), primary_key=True)
     name = Column(String)
     phone_number = Column(String)
     email = Column(String)
@@ -38,15 +37,14 @@ class UserProfile(Base):
     photo_id = Column(String)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Отношения
     user = relationship("User", back_populates="profile")
 
 class Category(Base):
     __tablename__ = 'categories'
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(15))
-    product: Mapped[List['Product']] = relationship(back_populates='category')
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50), nullable=False)
+    products = relationship("Product", back_populates="category", cascade="all, delete")
 
 class Product(Base):
     __tablename__ = 'products'
@@ -55,25 +53,26 @@ class Product(Base):
     name = Column(String, nullable=False)
     description = Column(String)
     price = Column(Float, nullable=False)
-    category_id = Column(Integer, ForeignKey('categories.id'))
+    category_id = Column(Integer, ForeignKey('categories.id', ondelete='CASCADE'))
     image_url = Column(String)
     is_available = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Отношения
-    category_id: Mapped[int] = mapped_column(ForeignKey('categories.id'))
-    category: Mapped['Category'] = relationship(back_populates='product')
-    cart_items = relationship("Cart", back_populates="product")
+    category = relationship("Category", back_populates="products")
+    cart_items = relationship("Cart", back_populates="product", cascade="all, delete")
 
 class Cart(Base):
     __tablename__ = 'cart'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.user_id'))
-    product_id = Column(Integer, ForeignKey('products.product_id'))
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
+    product_id = Column(Integer, ForeignKey('products.product_id', ondelete='CASCADE'))
     quantity = Column(Integer, default=1)
     added_date = Column(DateTime, default=datetime.utcnow)
     
-    # Отношения
     user = relationship("User", back_populates="cart_items")
-    product = relationship("Product", back_populates="cart_items") 
+    product = relationship("Product", back_populates="cart_items")
+
+async def async_main(): 
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

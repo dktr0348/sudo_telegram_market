@@ -160,3 +160,60 @@ async def category_products(category_id: int):
     except Exception as e:
         logging.error(f"Ошибка при создании клавиатуры продуктов: {e}")
         return None
+
+confirm = InlineKeyboardMarkup (inline_keyboard=[
+    [InlineKeyboardButton(text='Да', callback_data='ok-sure')], 
+    [InlineKeyboardButton(text='Нет', callback_data='cancel-sure')]],
+    resize_keyboard=True)
+
+admin_main = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Добавить категорию', callback_data='add_category'), 
+    KeyboardButton(text='Удалить категорию', callback_data='delete_category')],
+    [KeyboardButton(text='Добавить товар', callback_data='add_product'), 
+    KeyboardButton(text='Удалить товар', callback_data='delete_product')],
+    [KeyboardButton(text='Добавить админа', callback_data='add_admin'), 
+    KeyboardButton(text='Удалить админа', callback_data='delete_admin')],
+    [KeyboardButton(text='Выйти', callback_data='exit')],
+    ],
+    resize_keyboard=True)
+
+async def delete_categories():
+    all_categories = await db.get_categories()
+    keyboard = InlineKeyboardBuilder()
+    for category in all_categories:
+        keyboard.add(InlineKeyboardButton(text=category.name, callback_data=f'delete_{category.id}'))
+    return keyboard.adjust(2).as_markup()
+
+async def admin_categories():
+    all_categories = await db.get_categories()
+    keyboard = InlineKeyboardBuilder()
+    for category in all_categories:
+        keyboard.add(InlineKeyboardButton(text=category.name, callback_data=f'addcategory_{category.id}'))
+    return keyboard.adjust(2).as_markup()
+
+async def delete_product():
+    try:
+        all_products = await db.get_all_products()
+        keyboard = InlineKeyboardBuilder()
+        
+        if not all_products:
+            keyboard.add(InlineKeyboardButton(
+                text="Нет доступных товаров",
+                callback_data="no_products"
+            ))
+        else:
+            for product in all_products:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"{product.name} - {product.price}₽",
+                    callback_data=f"proddelete_{product.product_id}"
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Отмена",
+            callback_data="cancel_delete"
+        ))
+        
+        return keyboard.adjust(1).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры: {e}")
+        return None
