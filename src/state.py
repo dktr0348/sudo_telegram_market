@@ -32,8 +32,27 @@ class AddProduct(StatesGroup):
     name = State()
     description = State()
     price = State()
+    photo = State()
     confirm = State()
    
 class DeleteProduct(StatesGroup):
     select = State()
+    confirm = State()
+
+class AddAdmin(StatesGroup):
+    name = State()
+    confirm = State()
+
+class DeleteAdmin(StatesGroup):
+    select = State()
+    confirm = State()
+
+class EditProduct(StatesGroup):
+    select = State()
+    select_field = State()
+    edit_name = State()
+    edit_description = State()
+    edit_price = State()
+    edit_category = State()
+    edit_photo = State()
     confirm = State()

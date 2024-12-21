@@ -109,11 +109,20 @@ async def show_product_details(callback: CallbackQuery):
                     callback_data="back_to_categories")]
             ]
         )
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
+        
+        if product.photo_id:
+            await callback.message.answer_photo(
+                photo=product.photo_id,
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.edit_text(
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
     else:
         await callback.answer("Товар не найден")
 

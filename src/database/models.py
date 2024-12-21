@@ -3,7 +3,9 @@ from typing import Optional, List
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
 from sqlalchemy.ext.asyncio import (AsyncSession, AsyncAttrs, async_sessionmaker, create_async_engine)
-from src.config import DB_URL
+
+# Временно используем прямой URL для миграций
+DB_URL = "sqlite+aiosqlite:///bot_database.db"
 
 engine = create_async_engine(url=DB_URL,
                              echo=True)
@@ -20,6 +22,7 @@ class User(Base):
     first_name = Column(String)
     registration_date = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
     
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete")
     cart_items = relationship("Cart", back_populates="user", cascade="all, delete")
@@ -55,6 +58,7 @@ class Product(Base):
     price = Column(Float, nullable=False)
     category_id = Column(Integer, ForeignKey('categories.id', ondelete='CASCADE'))
     image_url = Column(String)
+    photo_id = Column(String)
     is_available = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     

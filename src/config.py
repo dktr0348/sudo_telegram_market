@@ -31,22 +31,19 @@ def load_config() -> Config:
     
     # Обработка admin_ids
     admin_ids_str = getenv('ADMIN_IDS', '')
-    # Удаляем все лишние символы, оставляем только числа и запятые
-    admin_ids_str = re.sub(r'[^\d,]', '', admin_ids_str)
-    
     try:
-        admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip()]
-        if not admin_ids:
-            raise ValueError("ADMIN_IDS list is empty")
+        if admin_ids_str:
+            # Удаляем все лишние символы, оставляем только числа и запятые
+            admin_ids_str = re.sub(r'[^\d,]', '', admin_ids_str)
+            admin_ids = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip()]
+        else:
+            admin_ids = []
     except ValueError as e:
         logging.error(f"Error parsing ADMIN_IDS: {e}")
-        raise ValueError(f"Invalid ADMIN_IDS format: {admin_ids_str}")
+        admin_ids = []
     
     # Обработка super_admin_id
     super_admin_id_str = getenv('SUPER_ADMIN_ID', '0')
-    # Удаляем все лишние символы, оставляем только числа
-    super_admin_id_str = re.sub(r'[^\d]', '', super_admin_id_str)
-    
     try:
         super_admin_id = int(super_admin_id_str)
         if super_admin_id == 0:
@@ -54,6 +51,10 @@ def load_config() -> Config:
     except ValueError as e:
         logging.error(f"Error parsing SUPER_ADMIN_ID: {e}")
         raise ValueError("Invalid SUPER_ADMIN_ID format")
+    
+    # Добавляем super_admin_id в список admin_ids, если его там нет
+    if super_admin_id not in admin_ids:
+        admin_ids.append(super_admin_id)
     
     return Config(
         token=token,
@@ -72,10 +73,3 @@ try:
 except Exception as e:
     logging.error(f"Failed to load configuration: {e}")
     raise
-
-# Преобразуем строку с ID администраторов в список целых чисел
-admin_ids_str = os.getenv('ADMIN_IDS', '').strip('[]').split(',')
-admin_ids = [int(admin_id.strip()) for admin_id in admin_ids_str if admin_id.strip()]
-# Добавляем super_admin_id в список администраторов, если его там нет
-if super_admin_id not in admin_ids:
-    admin_ids.append(super_admin_id)
