@@ -37,20 +37,21 @@ async def cmd_start(message: Message, db: Database):
         await message.message.delete()
         await message.message.answer('Добро пожаловать', reply_markup=main)
 
-@router.message(F.text == "Корзина")
+@router.message(F.text.in_({'🛒 Корзина', 'Корзина'}))
 async def show_cart(message: Message, db: Database):
+    """Показывает содержимое корзины пользователя"""
     cart_items = await db.get_cart(message.from_user.id)
     if not cart_items:
-        await message.answer("Ваша корзина пуста")
+        await message.answer("🛒 Ваша корзина пуста")
         return
     
-    cart_text = "Ваша корзина:\n\n"
+    cart_text = "🛒 Ваша корзина:\n\n"
     total = 0
     for name, price, quantity in cart_items:
         subtotal = price * quantity
         total += subtotal
-        cart_text += f"{name} x{quantity} = {subtotal}₽\n"
-    cart_text += f"\nИтого: {total}₽"
+        cart_text += f"📦 {name} x{quantity} = {subtotal}₽\n"
+    cart_text += f"\n💰 Итого: {total}₽"
     
     await message.answer(cart_text, reply_markup=cart_keyboard)
 
@@ -61,12 +62,8 @@ async def cmd_menu(message: Message):
         reply_markup=menu_commands
     )
 
-@router.message(F.text == "В главное меню")
-async def back_to_main_menu(message: Message):
-    await message.answer('Вы вернулись в главное меню', reply_markup=main)
-
-@router.message(F.text == 'Каталог')
-async def catalog(message: Message):
+@router.message(Command('catalog'))
+async def cmd_catalog(message: Message):
     keyboard = await categories()
     if keyboard:
         await message.answer(
@@ -75,6 +72,23 @@ async def catalog(message: Message):
         )
     else:
         await message.answer("К сожалению, категории сейчас недоступны")
+
+@router.message(F.text.in_({'🏠 В главное меню', 'В главное меню'}))
+async def back_to_main_menu(message: Message):
+    """Возврат в главное меню"""
+    await message.answer('🏠 Вы вернулись в главное меню', reply_markup=main)
+
+@router.message(F.text.in_({'🛍️ Каталог', 'Каталог'}))
+async def catalog(message: Message):
+    """Показывает каталог товаров"""
+    keyboard = await categories()
+    if keyboard:
+        await message.answer(
+            text='📋 Выберите категорию:',
+            reply_markup=keyboard
+        )
+    else:
+        await message.answer("❌ К сожалению, категории сейчас недоступны")
 
 @router.callback_query(F.data.startswith('category_'))
 async def show_category_products(callback: CallbackQuery):
@@ -138,14 +152,15 @@ async def back_to_categories(callback: CallbackQuery):
         await callback.answer("Категории недоступны")
 
 # Регистрация
-@router.message(F.text == "Регистрация")
+@router.message(F.text.in_({'👤 Регистрация', 'Регистрация'}))
 async def start_registration(message: Message, state: FSMContext, db: Database):
+    """Начало процесса регистрации"""
     if await db.is_user_registered(message.from_user.id):
-        await message.answer("Вы уже зарегистрированы!")
+        await message.answer("✅ Вы уже зарегистрированы!")
         return
     
     await state.set_state(Register.name)
-    await message.answer('Введите ваше имя')
+    await message.answer('👤 Введите ваше имя')
 
 @router.message(Register.name)
 async def reg_contact(message: Message, state: FSMContext):
@@ -217,13 +232,16 @@ async def confirm_registration(message: Message, state: FSMContext):
 async def reg_no_photo(message: Message):
     await message.answer('отправьте фото')
 
-@router.message(F.text == "Авторизация")
+@router.message(F.text.in_({'🔑 Авторизация', 'Авторизация'}))
 async def authorization(message: Message, db: Database):
+    """Авторизация пользователя"""
     if await db.is_user_registered(message.from_user.id):
-        await message.answer("Вы успешно авторизованы!")
+        await message.answer("✅ Вы успешно авторизованы!")
     else:
-        await message.answer("Вы не зарегистрированы. Пожалуйста, сначала пройдите регистрацию.", 
-                           reply_markup=main)
+        await message.answer(
+            "❌ Вы не зарегистрированы. Пожалуйста, сначала пройдите регистрацию.", 
+            reply_markup=main
+        )
 
 @router.message(Command("cancel"))
 @router.message(F.text.lower() == "отмена")

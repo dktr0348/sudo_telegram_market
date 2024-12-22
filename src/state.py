@@ -36,6 +36,7 @@ class AddProduct(StatesGroup):
     confirm = State()
    
 class DeleteProduct(StatesGroup):
+    select_category = State()
     select = State()
     confirm = State()
 
@@ -48,11 +49,12 @@ class DeleteAdmin(StatesGroup):
     confirm = State()
 
 class EditProduct(StatesGroup):
-    select = State()
+    select_category = State()
+    select_product = State()
     select_field = State()
     edit_name = State()
     edit_description = State()
     edit_price = State()
-    edit_category = State()
     edit_photo = State()
+    edit_category = State()
     confirm = State()

@@ -6,37 +6,36 @@ import logging
 # Главное меню
 main = ReplyKeyboardMarkup(keyboard=[
     [
-        KeyboardButton(text='Регистрация'),
-        KeyboardButton(text='Авторизация')
+        KeyboardButton(text='👤 Регистрация'),
+        KeyboardButton(text='🔑 Авторизация')
     ],
     [
-        KeyboardButton(text='Каталог'),
-        KeyboardButton(text='Корзина')
+        KeyboardButton(text='🛍️ Каталог'),
+        KeyboardButton(text='🛒 Корзина')
     ],
-    
-    [KeyboardButton(text='В главное меню')]
+    [KeyboardButton(text='🏠 В главное меню')]
 ], resize_keyboard=True)
 
 # Клавиатура для корзины
 cart_keyboard = ReplyKeyboardMarkup(keyboard=[
     [
-        KeyboardButton(text='Оформить заказ'),
-        KeyboardButton(text='Очистить корзину')
+        KeyboardButton(text='💳 Оформить заказ'),
+        KeyboardButton(text='🗑️ Очистить корзину')
     ],
-    [KeyboardButton(text='В главное меню')]
+    [KeyboardButton(text='🏠 В главное меню')]
 ], resize_keyboard=True)
 
 # Клавиатура для основных команд
 main_command = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text='Каталог', callback_data='catalog'),
-        InlineKeyboardButton(text='Корзина', callback_data='cart')
+        InlineKeyboardButton(text='🛍️ Каталог', callback_data='catalog'),
+        InlineKeyboardButton(text='🛒 Корзина', callback_data='cart')
     ],
     [
-        InlineKeyboardButton(text='Контакты', callback_data='contacts'),
-        InlineKeyboardButton(text='Локация', callback_data='location')
+        InlineKeyboardButton(text='📞 Контакты', callback_data='contacts'),
+        InlineKeyboardButton(text='📍 Локация', callback_data='location')
     ],
-    [InlineKeyboardButton(text='Назад', callback_data='back')]
+    [InlineKeyboardButton(text='◀️ Назад', callback_data='back')]
 ])
 
 # Функция для построения каталога (предполагаю, что она у вас уже есть)
@@ -57,33 +56,33 @@ async def catalog_builder():
 
 
 send_contact = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='Отправить номер телефона', request_contact=True)],
-    [KeyboardButton(text='Отмена регистрации')]
+    [KeyboardButton(text='📱 Отправить номер телефона', request_contact=True)],
+    [KeyboardButton(text='❌ Отмена регистрации')]
 ], resize_keyboard=True)
 
 send_location = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='Отправить местоположение', request_location=True)],
-    [KeyboardButton(text='Отмена регистрации')]
+    [KeyboardButton(text='📍 Отправить местоположение', request_location=True)],
+    [KeyboardButton(text='❌ Отмена регистрации')]
 ], resize_keyboard=True)
 
 # Клавиатура для меню команд
 menu_commands = ReplyKeyboardMarkup(keyboard=[
     [
-        KeyboardButton(text='/start'),
-        KeyboardButton(text='/menu'),
-        KeyboardButton(text='/help')
+        KeyboardButton(text='🚀 /start'),
+        KeyboardButton(text='📋 /menu'),
+        KeyboardButton(text='❓ /help')
     ],
     [
-        KeyboardButton(text='/profile'),
-        KeyboardButton(text='/settings'),
-        KeyboardButton(text='/register')
+        KeyboardButton(text='👤 /profile'),
+        KeyboardButton(text='⚙️ /settings'),
+        KeyboardButton(text='📝 /register')
     ],
-    [KeyboardButton(text='В главное меню')]
+    [KeyboardButton(text='🏠 В главное меню')]
 ], resize_keyboard=True)
 
 # Клавиатура для отмены действия
 cancel_kb = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text="Отменить редактирование")]
+    [KeyboardButton(text="❌ Отменить редактирование")]
 ], resize_keyboard=True)
 
 # Клавиатура для профиля
@@ -162,21 +161,26 @@ async def category_products(category_id: int):
         return None
 
 confirm = InlineKeyboardMarkup (inline_keyboard=[
-    [InlineKeyboardButton(text='Да', callback_data='ok-sure')], 
-    [InlineKeyboardButton(text='Нет', callback_data='cancel-sure')]],
+    [InlineKeyboardButton(text='✅ Да', callback_data='ok-sure')], 
+    [InlineKeyboardButton(text='❌ Нет', callback_data='cancel-sure')]],
     resize_keyboard=True)
 
 admin_main = ReplyKeyboardMarkup(keyboard=[
-    [KeyboardButton(text='Добавить категорию'), 
-    KeyboardButton(text='Удалить категорию')],
-    [KeyboardButton(text='Добавить товар'), 
-    KeyboardButton(text='Удалить товар')],
-    [KeyboardButton(text='Редактировать товар')],
-    [KeyboardButton(text='Добавить админа'), 
-    KeyboardButton(text='Удалить админа')],
-    [KeyboardButton(text='Выйти')],
+    [
+        KeyboardButton(text='➕ Добавить категорию'),
+        KeyboardButton(text='➖ Удалить категорию')
     ],
-    resize_keyboard=True)
+    [
+        KeyboardButton(text='➕ Добавить товар'),
+        KeyboardButton(text='➖ Удалить товар')
+    ],
+    [KeyboardButton(text='✏️ Редактировать товар')],
+    [
+        KeyboardButton(text='👥 Добавить админа'),
+        KeyboardButton(text='🚫 Удалить админа')
+    ],
+    [KeyboardButton(text='🚪 Выйти')]
+], resize_keyboard=True)
 
 async def delete_categories():
     all_categories = await db.get_categories()
@@ -313,3 +317,100 @@ def product_actions(product_id: int) -> InlineKeyboardMarkup:
             )
         ]
     ])
+
+async def edit_product_by_category_kb(category_id: int):
+    """Клавиатура для выбора товара для редактирования из конкретной категории"""
+    try:
+        products = await db.get_products_by_category(category_id)
+        keyboard = InlineKeyboardBuilder()
+        
+        if not products:
+            keyboard.add(InlineKeyboardButton(
+                text="Нет доступных товаров",
+                callback_data="no_products"
+            ))
+        else:
+            for product in products:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"{product.name} - {product.price}₽",
+                    callback_data=f"edit_product_{product.product_id}"
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Назад к категориям",
+            callback_data="back_to_categories"
+        ))
+        
+        return keyboard.adjust(1).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры: {e}")
+        return None
+
+async def delete_products():
+    """Клавиатура для удаления товаров"""
+    try:
+        all_products = await db.get_all_products()
+        keyboard = InlineKeyboardBuilder()
+        
+        if not all_products:
+            keyboard.add(InlineKeyboardButton(
+                text="Нет доступных товаров",
+                callback_data="no_products"
+            ))
+        else:
+            for product in all_products:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"{product.name} - {product.price}₽",
+                    callback_data=f"deleteproduct_{product.product_id}"
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Отмена",
+            callback_data="cancel_delete"
+        ))
+        
+        return keyboard.adjust(1).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры: {e}")
+        return None
+
+async def products_by_category(category_id: int):
+    """Клавиатура для выбора товара из категории"""
+    try:
+        products = await db.get_products_by_category(category_id)
+        keyboard = InlineKeyboardBuilder()
+        
+        if not products:
+            keyboard.add(InlineKeyboardButton(
+                text="В этой категории нет товаров",
+                callback_data="no_products"
+            ))
+        else:
+            for product in products:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"{product.name} - {product.price}₽",
+                    callback_data=f"product_{product.product_id}"
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Назад к категориям",
+            callback_data="back_to_categories"
+        ))
+        
+        return keyboard.adjust(1).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры: {e}")
+        return None
+
+edit_product = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="📝 Название", callback_data="edit_name"),
+        InlineKeyboardButton(text="📋 Описание", callback_data="edit_description")
+    ],
+    [
+        InlineKeyboardButton(text="💰 Цена", callback_data="edit_price"),
+        InlineKeyboardButton(text="📁 Категория", callback_data="edit_category")
+    ],
+    [InlineKeyboardButton(text="📷 Фото", callback_data="edit_photo")],
+    [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")]
+])

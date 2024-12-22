@@ -134,23 +134,32 @@ async def edit_product(session, product_id: int, **kwargs) -> bool:
     try:
         product = await session.get(Product, product_id)
         if not product:
+            logging.error(f"Товар с ID {product_id} не найден")
             return False
             
         # Обновляем только переданные поля
         for field, value in kwargs.items():
             if hasattr(product, field):
-                if field == 'price':
-                    value = float(value)
-                # Если удаляем фото (value=None для photo_id)
-                if field == 'photo_id' and value is None:
-                    setattr(product, field, None)
-                else:
-                    setattr(product, field, value)
+                if field == 'price' and value is not None:
+                    try:
+                        value = float(value)
+                    except (ValueError, TypeError):
+                        logging.error(f"Некорректное значение цены: {value}")
+                        continue
+                
+                # Обработка фото
+                if field == 'photo_id':
+                    logging.info(f"Обновление фото у товара {product_id}: {value}")
+                
+                setattr(product, field, value)
+                logging.info(f"Обновлено поле {field} у товара {product_id}: {value}")
         
         await session.commit()
+        logging.info(f"Товар {product_id} успешно обновлен")
         return True
     except Exception as e:
-        logging.error(f"Ошибка при редактировании товара: {e}")
+        logging.error(f"Ошибка при редактировании товара {product_id}: {e}")
+        await session.rollback()
         return False
 
 @connection
