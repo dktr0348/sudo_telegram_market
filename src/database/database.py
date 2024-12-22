@@ -90,7 +90,7 @@ class Database:
                     profile.location_lon,
                     profile.age,
                     profile.photo_id,
-                    user.registration_date.isoformat(),
+                    user.reg_date.isoformat() if user.reg_date else None,
                     user.username
                 )
         except Exception as e:
@@ -173,14 +173,41 @@ class Database:
         """Добавление товара в корзину"""
         try:
             async with self.async_session() as session:
-                cart_item = Cart(
-                    user_id=user_id,
-                    product_id=product_id,
-                    quantity=quantity
+                # Получаем товар для проверки доступного количества
+                product = await session.get(Product, product_id)
+                if not product:
+                    logging.error(f"Товар {product_id} не найден")
+                    return False
+                
+                # Проверяем, есть ли уже этот товар в корзине
+                stmt = select(Cart).where(
+                    Cart.user_id == user_id,
+                    Cart.product_id == product_id
                 )
-                session.add(cart_item)
+                result = await session.execute(stmt)
+                existing_cart_item = result.scalar_one_or_none()
+                
+                if existing_cart_item:
+                    # Обновляем количество существующего товара
+                    existing_cart_item.quantity = quantity
+                    existing_cart_item.product = product
+                    existing_cart_item.check_available_quantity()
+                else:
+                    # Создаем новый элемент корзины
+                    cart_item = Cart(
+                        user_id=user_id,
+                        product_id=product_id,
+                        quantity=quantity
+                    )
+                    cart_item.product = product
+                    cart_item.check_available_quantity()
+                    session.add(cart_item)
+                
                 await session.commit()
                 return True
+        except ValueError as e:
+            logging.error(f"Ошибка валидации: {e}")
+            return False
         except Exception as e:
             logging.error(f"Ошибка при добавлении в корзину: {e}")
             return False
@@ -223,3 +250,30 @@ class Database:
     async def close(self):
         """Закрытие соединения с базой данных"""
         await self.engine.dispose()
+
+    async def get_cart_item_quantity(self, user_id: int, product_id: int) -> int:
+        """Получение количества товара в корзине пользователя"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Cart.quantity).where(
+                    Cart.user_id == user_id,
+                    Cart.product_id == product_id
+                )
+                result = await session.execute(stmt)
+                quantity = result.scalar_one_or_none()
+                return quantity or 0
+        except Exception as e:
+            logging.error(f"Ошибка при получении количества товара в корзине: {e}")
+            return 0
+
+    async def get_product_by_id(self, product_id: int) -> Optional[Product]:
+        """Получение товара по ID"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Product).where(Product.product_id == product_id)
+                result = await session.execute(stmt)
+                product = result.scalar_one_or_none()
+                return product
+        except Exception as e:
+            logging.error(f"Ошибка при получении товара: {e}")
+            return None

@@ -414,3 +414,38 @@ edit_product = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="📷 Фото", callback_data="edit_photo")],
     [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")]
 ])
+
+async def admin_products_by_category(category_id: int):
+    """Клавиатура для выбора товара для редактирования (для админа)"""
+    try:
+        products = await db.get_products_by_category(category_id)
+        keyboard = InlineKeyboardBuilder()
+        
+        if not products:
+            keyboard.add(InlineKeyboardButton(
+                text="В этой категории нет товаров",
+                callback_data="no_products"
+            ))
+        else:
+            for product in products:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"✏️ {product.name}",
+                    callback_data=f"edit_product_{product.product_id}"
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Назад к категориям",
+            callback_data="back_to_categories"
+        ))
+        
+        return keyboard.adjust(1).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании клавиатуры: {e}")
+        return None
+
+# Клавиатура для пропуска геолокации
+skip_location = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='📍 Отправить местоположение', request_location=True)],
+    [KeyboardButton(text='⏩ Пропустить')],
+    [KeyboardButton(text='❌ Отмена регистрации')]
+], resize_keyboard=True)

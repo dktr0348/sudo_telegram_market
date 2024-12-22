@@ -6,7 +6,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from ..database.database import Database
 from ..keyboards import (main, cart_keyboard, main_command, menu_commands,
-                                 send_contact, send_location, categories,
+                                 send_contact, skip_location, categories,
                                  category_products, profile_keyboard)
 from ..state import Register
 from ..database import requests as db
@@ -103,26 +103,46 @@ async def show_category_products(callback: CallbackQuery):
         await callback.answer("В этой категории пока нет товаров")
 
 @router.callback_query(F.data.startswith('product_'))
-async def show_product_details(callback: CallbackQuery):
+async def show_product_details(callback: CallbackQuery, db: Database):
     product_id = int(callback.data.split('_')[1])
     product = await db.get_product_by_id(product_id)
     
     if product:
+        # Формируем информацию о наличии товара
+        availability_info = (
+            f"✅ В наличии: {product.quantity} шт."
+            if product.quantity > 0
+            else "❌ Товар отсутствует"
+        )
+        
         text = (
             f"📦 <b>{product.name}</b>\n\n"
             f"📝 {product.description}\n\n"
-            f"💰 Цена: {product.price}₽"
+            f"💰 Цена: {product.price}₽\n\n"
+            f"📊 {availability_info}"
         )
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="🛒 Добавить в корзину", 
-                    callback_data=f"add_to_cart_{product_id}")],
-                [InlineKeyboardButton(
-                    text="◀️ Назад к категориям", 
-                    callback_data="back_to_categories")]
-            ]
-        )
+        
+        # Создаем клавиатуру только если товар есть в наличии
+        keyboard = None
+        if product.quantity > 0:
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text="🛒 Добавить в корзину", 
+                        callback_data=f"add_to_cart_{product_id}")],
+                    [InlineKeyboardButton(
+                        text="◀️ Назад к категориям", 
+                        callback_data="back_to_categories")]
+                ]
+            )
+        else:
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text="◀️ Назад к категориям", 
+                        callback_data="back_to_categories")]
+                ]
+            )
         
         if product.photo_id:
             await callback.message.answer_photo(
@@ -172,9 +192,15 @@ async def reg_contact(message: Message, state: FSMContext):
 async def reg_location(message: Message, state: FSMContext):
     await state.update_data(contact=message.contact.phone_number)
     await state.set_state(Register.location)
-    await message.answer('Отправьте локацию',
-                        reply_markup=send_location,
-                        protect_content=True)
+    await message.answer('Отправьте локацию или пропустите этот шаг',
+                        reply_markup=skip_location)
+
+@router.message(Register.location, F.text == "⏩ Пропустить")
+async def skip_location(message: Message, state: FSMContext):
+    """Пропуск отправки геолокации"""
+    await state.update_data(location=[None, None])
+    await state.set_state(Register.email)
+    await message.answer('Введите e-mail', reply_markup=ReplyKeyboardRemove())
 
 @router.message(Register.location, F.location)
 async def reg_email(message: Message, state: FSMContext):
@@ -351,7 +377,7 @@ async def cmd_profile(message: Message, db: Database):
                     reply_markup=profile_keyboard
                 )
             except Exception as e:
-                logging.error(f"Ошибка при отправке фото профиля: {e}")
+                logging.error(f"Ошибка ��ри отправке фото профиля: {e}")
                 await message.answer(
                     profile_text,
                     parse_mode="HTML",
@@ -370,3 +396,103 @@ async def cmd_profile(message: Message, db: Database):
             "Произошла ошибка при загрузке профиля. Попробуйте позже.",
             reply_markup=main
         )
+
+@router.callback_query(F.data.startswith('add_to_cart_'))
+async def add_to_cart(callback: CallbackQuery, db: Database):
+    """Добавление товара в корзину"""
+    product_id = int(callback.data.split('_')[3])
+    user_id = callback.from_user.id
+    
+    # Получаем текущее количество товара в корзине
+    current_quantity = await db.get_cart_item_quantity(user_id, product_id)
+    
+    # Создаем клавиатуру для выбора количества
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➖", callback_data=f"qty_minus_{product_id}"),
+            InlineKeyboardButton(text=f"{current_quantity + 1}", callback_data="current_qty"),
+            InlineKeyboardButton(text="➕", callback_data=f"qty_plus_{product_id}")
+        ],
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_cart_{product_id}")]
+    ])
+    
+    product = await db.get_product_by_id(product_id)
+    await callback.message.answer(
+        f"📦 Товар: {product.name}\n"
+        f"💰 Цена: {product.price}₽\n"
+        f"🔢 Выберите количество:",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(F.data.startswith('qty_minus_'))
+async def decrease_quantity(callback: CallbackQuery, db: Database):
+    """Уменьшение количества товара"""
+    product_id = int(callback.data.split('_')[2])
+    current_qty = int(callback.message.reply_markup.inline_keyboard[0][1].text)
+    
+    if current_qty > 1:
+        new_qty = current_qty - 1
+        await update_quantity_keyboard(callback.message, product_id, new_qty)
+
+@router.callback_query(F.data.startswith('qty_plus_'))
+async def increase_quantity(callback: CallbackQuery, db: Database):
+    """Увеличение количества товара"""
+    product_id = int(callback.data.split('_')[2])
+    current_qty = int(callback.message.reply_markup.inline_keyboard[0][1].text)
+    new_qty = current_qty + 1
+    await update_quantity_keyboard(callback.message, product_id, new_qty)
+
+async def update_quantity_keyboard(message: Message, product_id: int, new_qty: int):
+    """Обновление клавиатуры с количеством"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➖", callback_data=f"qty_minus_{product_id}"),
+            InlineKeyboardButton(text=str(new_qty), callback_data="current_qty"),
+            InlineKeyboardButton(text="➕", callback_data=f"qty_plus_{product_id}")
+        ],
+        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_cart_{product_id}")]
+    ])
+    await message.edit_reply_markup(reply_markup=keyboard)
+
+@router.callback_query(F.data.startswith('confirm_cart_'))
+async def confirm_add_to_cart(callback: CallbackQuery, db: Database):
+    """Подтверждение добавления в корзину"""
+    product_id = int(callback.data.split('_')[2])
+    quantity = int(callback.message.reply_markup.inline_keyboard[0][1].text)
+    user_id = callback.from_user.id
+    
+    if await db.add_to_cart(user_id, product_id, quantity):
+        await callback.message.edit_text(
+            f"✅ Товар добавлен в корзину (количество: {quantity})"
+        )
+    else:
+        await callback.message.edit_text("❌ Ошибка при добавлении товара в корзину")
+
+@router.message(F.text == '🗑️ Очистить корзину')
+async def clear_cart(message: Message, db: Database):
+    """Очистка корзины"""
+    if await db.clear_cart(message.from_user.id):
+        await message.answer("🗑️ Корзина очищена", reply_markup=main)
+    else:
+        await message.answer("❌ Ошибка при очистке корзины")
+
+@router.message(F.text == '💳 Оформить заказ')
+async def checkout(message: Message, db: Database):
+    """Оформление заказа"""
+    cart_items = await db.get_cart(message.from_user.id)
+    if not cart_items:
+        await message.answer("❌ Ваша корзина пуста")
+        return
+    
+    total = sum(price * quantity for _, price, quantity in cart_items)
+    order_text = "📋 Ваш заказ:\n\n"
+    for name, price, quantity in cart_items:
+        order_text += f"📦 {name} x{quantity} = {price * quantity}₽\n"
+    order_text += f"\n💰 Итого к оплате: {total}₽"
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💳 Оплатить", callback_data="pay_order")],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_order")]
+    ])
+    
+    await message.answer(order_text, reply_markup=keyboard)

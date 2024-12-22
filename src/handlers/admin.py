@@ -396,9 +396,9 @@ async def edit_product_cmd(message: Message, state: FSMContext):
 @router.callback_query(admin_filter, F.data.startswith("category_"), st.EditProduct.select_category)
 async def edit_product_select(callback: CallbackQuery, state: FSMContext):
     """Выбор товара для редактирования"""
-    category_id = int(callback.data.split("_")[1])
+    category_id = int(callback.data.split('_')[1])
     await state.update_data(category_id=category_id)
-    keyboard = await kb.products_by_category(category_id)
+    keyboard = await kb.admin_products_by_category(category_id)
     await callback.message.answer(
         "📦 Выберите товар для редактирования:",
         reply_markup=keyboard

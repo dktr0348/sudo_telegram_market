@@ -1,18 +1,24 @@
 from datetime import datetime
-from typing import Optional, List
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean
-from sqlalchemy.orm import Mapped, mapped_column, declarative_base, relationship
-from sqlalchemy.ext.asyncio import (AsyncSession, AsyncAttrs, async_sessionmaker, create_async_engine)
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, CheckConstraint
+from sqlalchemy.orm import relationship, validates, sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 
-# Временно используем прямой URL для миграций
-DB_URL = "sqlite+aiosqlite:///bot_database.db"
-
-engine = create_async_engine(url=DB_URL,
-                             echo=True)
-
-async_session = async_sessionmaker(engine)
-
+# Создаем базовый класс для моделей
 Base = declarative_base()
+
+# Создаем асинхронный движок
+engine = create_async_engine(
+    "sqlite+aiosqlite:///bot_database.db",
+    echo=True
+)
+
+# Создаем фабрику асинхронных сессий
+async_session = sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
 class User(Base):
     __tablename__ = 'users'
@@ -20,12 +26,11 @@ class User(Base):
     user_id = Column(Integer, primary_key=True)
     username = Column(String)
     first_name = Column(String)
-    registration_date = Column(DateTime, default=datetime.utcnow)
-    is_active = Column(Boolean, default=True)
+    reg_date = Column(DateTime, default=datetime.utcnow)
     is_admin = Column(Boolean, default=False)
     
-    profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete")
-    cart_items = relationship("Cart", back_populates="user", cascade="all, delete")
+    profile = relationship('UserProfile', back_populates='user', uselist=False)
+    cart_items = relationship('Cart', back_populates='user', cascade='all, delete-orphan')
 
 class UserProfile(Base):
     __tablename__ = 'user_profiles'
@@ -38,45 +43,70 @@ class UserProfile(Base):
     location_lon = Column(Float)
     age = Column(Integer)
     photo_id = Column(String)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    user = relationship("User", back_populates="profile")
+    user = relationship('User', back_populates='profile')
 
 class Category(Base):
     __tablename__ = 'categories'
-
+    
     id = Column(Integer, primary_key=True)
-    name = Column(String(50), nullable=False)
-    products = relationship("Product", back_populates="category", cascade="all, delete")
+    name = Column(String, nullable=False)
+    
+    products = relationship('Product', back_populates='category', cascade='all, delete-orphan')
 
 class Product(Base):
     __tablename__ = 'products'
     
-    product_id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)
-    description = Column(String)
-    price = Column(Float, nullable=False)
+    product_id = Column(Integer, primary_key=True)
     category_id = Column(Integer, ForeignKey('categories.id', ondelete='CASCADE'))
-    image_url = Column(String)
+    name = Column(String)
+    description = Column(Text)
+    price = Column(Float)
     photo_id = Column(String)
-    is_available = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    quantity = Column(Integer, default=0)
     
-    category = relationship("Category", back_populates="products")
-    cart_items = relationship("Cart", back_populates="product", cascade="all, delete")
+    category = relationship('Category', back_populates='products')
+    cart_items = relationship('Cart', back_populates='product', cascade='all, delete-orphan')
+    
+    # Проверка, что количество товара не может быть отрицательным
+    __table_args__ = (
+        CheckConstraint(quantity >= 0, name='check_quantity_positive'),
+    )
+    
+    @validates('quantity')
+    def validate_quantity(self, key, value):
+        """Валидация количества товара"""
+        if value < 0:
+            raise ValueError("Количество товара не может быть отрицательным")
+        return value
 
 class Cart(Base):
     __tablename__ = 'cart'
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
-    product_id = Column(Integer, ForeignKey('products.product_id', ondelete='CASCADE'))
-    quantity = Column(Integer, default=1)
-    added_date = Column(DateTime, default=datetime.utcnow)
+    cart_id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
+    product_id = Column(Integer, ForeignKey('products.product_id', ondelete='CASCADE'), nullable=False)
+    quantity = Column(Integer, default=1, nullable=False)
     
-    user = relationship("User", back_populates="cart_items")
-    product = relationship("Product", back_populates="cart_items")
-
-async def async_main(): 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    user = relationship('User', back_populates='cart_items')
+    product = relationship('Product', back_populates='cart_items')
+    
+    # Проверка, что количество в корзине положительное
+    __table_args__ = (
+        CheckConstraint(quantity > 0, name='check_cart_quantity_positive'),
+    )
+    
+    @validates('quantity')
+    def validate_quantity(self, key, value):
+        """Валидация количества товара в корзине"""
+        if value <= 0:
+            raise ValueError("Количество товара в корзине должно быть положительным")
+        return value
+    
+    def check_available_quantity(self):
+        """Проверка доступного количества товара"""
+        if self.quantity > self.product.quantity:
+            raise ValueError(
+                f"Недостаточно товара на складе. Доступно: {self.product.quantity}, "
+                f"запрошено: {self.quantity}"
+            )

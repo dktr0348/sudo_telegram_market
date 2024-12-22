@@ -171,3 +171,71 @@ async def is_admin(session, user_id: int) -> bool:
     except Exception as e:
         logging.error(f"Ошибка при проверке прав администратора {user_id}: {e}")
         return False
+
+@connection
+async def get_cart_item_quantity(user_id: int, product_id: int) -> int:
+    """Получение количества товара в корзине пользователя"""
+    async with async_session() as session:
+        result = await session.execute(
+            select(Cart.quantity)
+            .where(Cart.user_id == user_id)
+            .where(Cart.product_id == product_id)
+        )
+        quantity = result.scalar()
+        return quantity or 0
+
+@connection
+async def add_to_cart(user_id: int, product_id: int, quantity: int) -> bool:
+    """Добавление товара в корзину"""
+    try:
+        async with async_session() as session:
+            # Проверяем, есть ли уже товар в корзине
+            result = await session.execute(
+                select(Cart)
+                .where(Cart.user_id == user_id)
+                .where(Cart.product_id == product_id)
+            )
+            cart_item = result.scalar()
+            
+            if cart_item:
+                # Обновляем количество
+                cart_item.quantity = quantity
+            else:
+                # Создаем новую запись
+                cart_item = Cart(
+                    user_id=user_id,
+                    product_id=product_id,
+                    quantity=quantity
+                )
+                session.add(cart_item)
+            
+            await session.commit()
+            return True
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении в корзину: {e}")
+        return False
+
+@connection
+async def clear_cart(user_id: int) -> bool:
+    """Очистка корзины пользователя"""
+    try:
+        async with async_session() as session:
+            await session.execute(
+                delete(Cart).where(Cart.user_id == user_id)
+            )
+            await session.commit()
+            return True
+    except Exception as e:
+        logging.error(f"Ошибка при очистке корзины: {e}")
+        return False
+
+@connection
+async def get_cart(user_id: int) -> list:
+    """Получение содержимого корзины пользователя"""
+    async with async_session() as session:
+        result = await session.execute(
+            select(Product.name, Product.price, Cart.quantity)
+            .join(Cart, Cart.product_id == Product.product_id)
+            .where(Cart.user_id == user_id)
+        )
+        return result.all()
