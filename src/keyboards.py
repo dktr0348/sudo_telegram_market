@@ -28,7 +28,7 @@ cart_keyboard = ReplyKeyboardMarkup(keyboard=[
 # Клавиатура для основных команд
 main_command = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text='🛍️ Катал��г', callback_data='catalog'),
+        InlineKeyboardButton(text='🛍️ Катал����г', callback_data='catalog'),
         InlineKeyboardButton(text='🛒 Корзина', callback_data='cart')
     ],
     [
@@ -128,7 +128,7 @@ async def categories():
         
         return keyboard.adjust(2).as_markup()
     except Exception as e:
-        logging.error(f"Ошибка пр�� создании клавиатуры категорий: {e}")
+        logging.error(f"Ошибка при создании клавиатуры категорий: {e}")
         return None
 
 # Клавиатура для выбора продукта
@@ -268,7 +268,7 @@ async def edit_product_kb():
         
         if not all_products:
             keyboard.add(InlineKeyboardButton(
-                text="Нет д��ступных товаров",
+                text="Нет доступных товаров",
                 callback_data="no_products"
             ))
         else:
@@ -304,20 +304,19 @@ edit_product_fields = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_admin_menu")]
 ])
 
-def product_actions(product_id: int) -> InlineKeyboardMarkup:
+def product_actions(product_id: int, current_quantity: int = 1) -> InlineKeyboardMarkup:
     """Клавиатура действий с товаром"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(
-                text="🛒 В корзину",
-                callback_data=f"add_to_cart_{product_id}"
-            )
+            InlineKeyboardButton(text="➖", callback_data=f"decrease_{product_id}"),
+            InlineKeyboardButton(text=f"{current_quantity} шт.", callback_data=f"quantity_{product_id}"),
+            InlineKeyboardButton(text="➕", callback_data=f"increase_{product_id}")
         ],
         [
-            InlineKeyboardButton(
-                text="◀️ Назад",
-                callback_data="back_to_categories"
-            )
+            InlineKeyboardButton(text="🛒 Добавить в корзину", callback_data=f"add_to_cart_{product_id}")
+        ],
+        [
+            InlineKeyboardButton(text="◀️ Назад к категориям", callback_data="back_to_categories")
         ]
     ])
 
@@ -530,3 +529,28 @@ skip_photo_kb = ReplyKeyboardMarkup(
     ],
     resize_keyboard=True
 )
+
+def cart_item_keyboard(product_id: int, current_quantity: int = 1) -> InlineKeyboardMarkup:
+    """Клавиатура для товара в корзине"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➖", callback_data=f"cart_decrease_{product_id}"),
+            InlineKeyboardButton(text=f"{current_quantity} шт.", callback_data=f"cart_quantity_{product_id}"),
+            InlineKeyboardButton(text="➕", callback_data=f"cart_increase_{product_id}")
+        ],
+        [
+            InlineKeyboardButton(text="🗑 Удалить", callback_data=f"remove_from_cart_{product_id}")
+        ]
+    ])
+
+def cart_summary_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для корзины"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💳 Оформить заказ", callback_data="checkout"),
+            InlineKeyboardButton(text="🗑 Очистить корзину", callback_data="clear_cart")
+        ],
+        [
+            InlineKeyboardButton(text="🛍️ Продолжить покупки", callback_data="continue_shopping")
+        ]
+    ])

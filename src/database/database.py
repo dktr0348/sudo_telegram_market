@@ -221,16 +221,7 @@ class Database:
                 ).where(Cart.user_id == user_id)
                 
                 result = await session.execute(stmt)
-                cart_items = []
-                
-                for product, cart_item in result:
-                    cart_items.append((
-                        product.name,
-                        product.price,
-                        cart_item.quantity
-                    ))
-                
-                return cart_items
+                return [(product, cart_item.quantity) for product, cart_item in result]
         except Exception as e:
             logging.error(f"Ошибка при получении корзины: {e}")
             return []
@@ -277,3 +268,18 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка при получении товара: {e}")
             return None
+
+    async def remove_from_cart(self, user_id: int, product_id: int) -> bool:
+        """Удаление товара из корзины"""
+        try:
+            async with self.async_session() as session:
+                stmt = delete(Cart).where(
+                    Cart.user_id == user_id,
+                    Cart.product_id == product_id
+                )
+                await session.execute(stmt)
+                await session.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Ошибка при удалении товара из корзины: {e}")
+            return False

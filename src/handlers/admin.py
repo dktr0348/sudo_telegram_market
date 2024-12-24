@@ -54,7 +54,7 @@ async def cancel_add_admin(message: Message, state: FSMContext):
 
 @router.message(st.AddAdmin.name)
 async def add_admin_confirm(message: Message, state: FSMContext):
-    """��одтверждение добавления администратора"""
+    """Подтверждение добавления администратора"""
     if message.from_user.id != super_admin_id:
         await message.answer("❌ У вас нет прав для добавления администраторов")
         await state.clear()
@@ -270,7 +270,7 @@ async def edit_product_fields(callback: CallbackQuery, state: FSMContext):
     if product:
         text = (
             f"📦 Товар: {product.name}\n"
-            f"📝 Описание: {product.description}\n"
+                    f"📝 Описание: {product.description}\n"
             f"💰 Цена: {product.price}₽\n"
             f"🔢 Количество: {product.quantity}\n"
         )
@@ -303,7 +303,7 @@ async def show_edit_menu(message: Message, state: FSMContext, success_message: s
         text = (
             f"{success_message}\n\n" if success_message else ""
             f"📦 Товар: {product.name}\n"
-            f"📝 Описание: {product.description}\n"
+                    f"📝 Описание: {product.description}\n"
             f"💰 Цена: {product.price}₽\n"
             f"🔢 Количество: {product.quantity}\n\n"
             "Выберите, что хотите отредактировать:"
@@ -319,7 +319,7 @@ async def show_edit_menu(message: Message, state: FSMContext, success_message: s
             await message.answer(
                 text,
                 reply_markup=kb.edit_product
-            )
+        )
         await state.set_state(st.EditProduct.select_field)
     else:
         await message.answer(
@@ -459,7 +459,7 @@ async def confirm_delete_product(callback: CallbackQuery, state: FSMContext):
             "❌ Товар не найден",
             reply_markup=kb.admin_main
         )
-        await state.clear()
+    await state.clear()
 
 @router.callback_query(admin_filter, F.data == "ok-sure", st.DeleteProduct.confirm)
 async def delete_product_finish(callback: CallbackQuery, state: FSMContext):
@@ -602,10 +602,10 @@ async def save_product_quantity(message: Message, state: FSMContext):
         if quantity < 0:
             await message.answer("❌ Количество не может быть отрицательным")
             return
-        
+            
         data = await state.get_data()
         if await db.edit_product(data['product_id'], quantity=quantity):
-            await show_edit_menu(message, state, "✅ Количество товара обновлен��")
+            await show_edit_menu(message, state, "✅ Количество товара обновлено")
         else:
             await message.answer("❌ Ошибка при обновлении количества")
     except ValueError:
@@ -795,7 +795,7 @@ async def add_product_name(callback: CallbackQuery, state: FSMContext):
     await state.update_data(category_id=category_id)
     await state.set_state(st.AddProduct.name)
     await callback.message.answer(
-        "📝 Введите н��звание товара:",
+        "📝 Введите название товара:",
         reply_markup=kb.cancel_keyboard
     )
 
@@ -829,7 +829,7 @@ async def add_product_photo(message: Message, state: FSMContext):
         await message.answer(
             "📷 Отправьте фото товара (или нажмите «Пропустить фото»):",
             reply_markup=kb.skip_photo_kb
-        )
+            )
     except ValueError:
         await message.answer("❌ Пожалуйста, введите корректную цену")
 
@@ -868,7 +868,7 @@ async def confirm_product_adding(message: Message, state: FSMContext, data: dict
     await state.set_state(st.AddProduct.confirm)
 
 # Добавим общий обработчик отмены
-@router.message(F.text == "❌ Отмен��ть")
+@router.message(F.text == "❌ Отменить")
 async def cancel_any_state(message: Message, state: FSMContext):
     """Отмена любого действия"""
     current_state = await state.get_state()

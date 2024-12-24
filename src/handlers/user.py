@@ -5,13 +5,12 @@ from aiogram.types import (Message, CallbackQuery, ReplyKeyboardRemove,
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from ..database.database import Database
-from ..keyboards import (main, cart_keyboard, main_command, menu_commands,
-                                 send_contact, skip_location, categories,
-                                 category_products, profile_keyboard)
+import src.keyboards as kb
 from ..state import Register
 from ..database import requests as db
 import logging
 import re
+from typing import Union
 
 router = Router()
 
@@ -32,39 +31,79 @@ async def cmd_start(message: Message, db: Database):
             username=user.username,
             first_name=user.first_name
         )
-        await message.answer('Добро пожаловать', reply_markup=main)
+        await message.answer('Добро пожаловать', reply_markup=kb.main)
     else:
         await message.message.delete()
         await message.message.answer('Добро пожаловать', reply_markup=main)
 
 @router.message(F.text.in_({'🛒 Корзина', 'Корзина'}))
-async def show_cart(message: Message, db: Database):
-    """Показывает содержимое корзины пользователя"""
-    cart_items = await db.get_cart(message.from_user.id)
-    if not cart_items:
-        await message.answer("🛒 Ваша корзина пуста")
-        return
-    
-    cart_text = "🛒 Ваша корзина:\n\n"
-    total = 0
-    for name, price, quantity in cart_items:
-        subtotal = price * quantity
-        total += subtotal
-        cart_text += f"📦 {name} x{quantity} = {subtotal}₽\n"
-    cart_text += f"\n💰 Итого: {total}₽"
-    
-    await message.answer(cart_text, reply_markup=cart_keyboard)
+@router.callback_query(F.data == "show_cart")
+async def show_cart(event: Union[Message, CallbackQuery], db: Database):
+    """Показ корзины"""
+    try:
+        user_id = event.from_user.id
+        cart_items = await db.get_cart(user_id)
+        
+        if not cart_items:
+            text = "🛒 Ваша корзина пуста"
+            if isinstance(event, CallbackQuery):
+                await event.message.edit_text(text, reply_markup=kb.main)
+            else:
+                await event.answer(text, reply_markup=kb.main)
+            return
+
+        total = 0
+        # Показываем каждый товар отдельным сообщением с кнопками управления
+        for product, quantity in cart_items:
+            item_total = product.price * quantity
+            total += item_total
+            
+            text = (
+                f"📦 {product.name}\n"
+                f"💰 {product.price}₽ x {quantity} шт. = {item_total}₽"
+            )
+            
+            if isinstance(event, CallbackQuery):
+                message = event.message
+            else:
+                message = event
+                
+            if product.photo_id:
+                await message.answer_photo(
+                    photo=product.photo_id,
+                    caption=text,
+                    reply_markup=kb.cart_item_keyboard(product.product_id, quantity)
+                )
+            else:
+                await message.answer(
+                    text,
+                    reply_markup=kb.cart_item_keyboard(product.product_id, quantity)
+                )
+        
+        # В конце показываем итоговую сумму и общие кнопки корзины
+        await message.answer(
+            f"💰 Итого: {total}₽",
+            reply_markup=kb.cart_summary_keyboard()
+        )
+            
+    except Exception as e:
+        logging.error(f"Ошибка при отображении корзины: {e}")
+        error_text = "Произошла ошибка при загрузке корзины"
+        if isinstance(event, CallbackQuery):
+            await event.message.edit_text(error_text, reply_markup=kb.main)
+        else:
+            await event.answer(error_text, reply_markup=kb.main)
 
 @router.message(Command('menu'))
 async def cmd_menu(message: Message):
     await message.answer(
         text='Доступные команды:', 
-        reply_markup=menu_commands
+        reply_markup=kb.menu_commands
     )
 
 @router.message(Command('catalog'))
 async def cmd_catalog(message: Message):
-    keyboard = await categories()
+    keyboard = await kb.categories()
     if keyboard:
         await message.answer(
             text='Выберите категорию:',
@@ -76,12 +115,12 @@ async def cmd_catalog(message: Message):
 @router.message(F.text.in_({'🏠 В главное меню', 'В главное меню'}))
 async def back_to_main_menu(message: Message):
     """Возврат в главное меню"""
-    await message.answer('🏠 Вы вернулись в главное меню', reply_markup=main)
+    await message.answer('🏠 Вы вернулись в главное меню', reply_markup=kb.main)
 
 @router.message(F.text.in_({'🛍️ Каталог', 'Каталог'}))
 async def catalog(message: Message):
     """Показывает каталог товаров"""
-    keyboard = await categories()
+    keyboard = await kb.categories()
     if keyboard:
         await message.answer(
             text='📋 Выберите категорию:',
@@ -93,7 +132,7 @@ async def catalog(message: Message):
 @router.callback_query(F.data.startswith('category_'))
 async def show_category_products(callback: CallbackQuery):
     category_id = int(callback.data.split('_')[1])
-    keyboard = await category_products(category_id)
+    keyboard = await kb.category_products(category_id)
     if keyboard:
         await callback.message.edit_text(
             text='Выберите товар:',
@@ -104,57 +143,33 @@ async def show_category_products(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith('product_'))
 async def show_product_details(callback: CallbackQuery, db: Database):
+    """Показ деталей товара"""
     product_id = int(callback.data.split('_')[1])
     product = await db.get_product_by_id(product_id)
     
     if product:
-        # Формируем информацию о наличии товара
-        availability_info = (
-            f"✅ В наличии: {product.quantity} шт."
-            if product.quantity > 0
-            else "❌ Товар отсутствует"
-        )
+        # Получаем текущее количество в корзине
+        current_quantity = await db.get_cart_item_quantity(callback.from_user.id, product_id)
         
         text = (
             f"📦 <b>{product.name}</b>\n\n"
             f"📝 {product.description}\n\n"
-            f"💰 Цена: {product.price}₽\n\n"
-            f"📊 {availability_info}"
+            f"💰 Цена: {product.price}₽\n"
+            f"✅ В наличии: {product.quantity} шт.\n"
         )
         
-        # Создаем клавиатуру только если товар есть в наличии
-        keyboard = None
-        if product.quantity > 0:
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text="🛒 Добавить в корзину", 
-                        callback_data=f"add_to_cart_{product_id}")],
-                    [InlineKeyboardButton(
-                        text="◀️ Назад к категориям", 
-                        callback_data="back_to_categories")]
-                ]
-            )
-        else:
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text="◀️ Назад к категориям", 
-                        callback_data="back_to_categories")]
-                ]
-            )
-        
         if product.photo_id:
+            await callback.message.delete()
             await callback.message.answer_photo(
                 photo=product.photo_id,
                 caption=text,
-                reply_markup=keyboard,
+                reply_markup=kb.product_actions(product_id, current_quantity or 1),
                 parse_mode="HTML"
             )
         else:
             await callback.message.edit_text(
                 text=text,
-                reply_markup=keyboard,
+                reply_markup=kb.product_actions(product_id, current_quantity or 1),
                 parse_mode="HTML"
             )
     else:
@@ -162,7 +177,7 @@ async def show_product_details(callback: CallbackQuery, db: Database):
 
 @router.callback_query(F.data == "back_to_categories")
 async def back_to_categories(callback: CallbackQuery):
-    keyboard = await categories()
+    keyboard = await kb.    categories()
     if keyboard:
         await callback.message.edit_text(
             text='Выберите категорию:',
@@ -186,14 +201,14 @@ async def start_registration(message: Message, state: FSMContext, db: Database):
 async def reg_contact(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
     await state.set_state(Register.contact)
-    await message.answer('Отправьте контакт', reply_markup=send_contact)
+    await message.answer('Отправьте контакт', reply_markup=kb.send_contact)
 
 @router.message(Register.contact, F.contact)
 async def reg_location(message: Message, state: FSMContext):
     await state.update_data(contact=message.contact.phone_number)
     await state.set_state(Register.location)
     await message.answer('Отправьте локацию или пропустите этот шаг',
-                        reply_markup=skip_location)
+                        reply_markup=kb.skip_location)
 
 @router.message(Register.location, F.text == "⏩ Пропустить")
 async def skip_location(message: Message, state: FSMContext):
@@ -266,7 +281,7 @@ async def authorization(message: Message, db: Database):
     else:
         await message.answer(
             "❌ Вы не зарегистрированы. Пожалуйста, сначала пройдите регистрацию.", 
-            reply_markup=main
+            reply_markup=kb.main
         )
 
 @router.message(Command("cancel"))
@@ -279,7 +294,7 @@ async def cancel_registration(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "Регистрация отменена. Вы можете начать заново.",
-        reply_markup=main
+        reply_markup=kb.main
     )
 
 @router.message(Register.confirm)
@@ -297,7 +312,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
                 age=int(data['age']),
                 photo_id=data['photo']
             ):
-                await message.answer('Регистрация успешно завершена!', reply_markup=main)
+                await message.answer('Регистрация успешно завершена!', reply_markup=kb.main)
             else:
                 await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
         except Exception as e:
@@ -309,7 +324,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
         await state.clear()
         await message.answer(
             "Регистрация отменена. Вы можете начать заново.",
-            reply_markup=main
+            reply_markup=kb.main
         )
     else:
         await message.answer("Пожалуйста, используйте кнопки для подтверждения или отмены")
@@ -330,7 +345,7 @@ async def back_to_menu(callback: CallbackQuery):
     await callback.message.delete()
     await callback.message.answer(
         'Вы вернулись в главное меню',
-        reply_markup=main
+        reply_markup=kb.main
     )
 
 @router.message(Command("profile"))
@@ -344,7 +359,7 @@ async def cmd_profile(message: Message, db: Database):
         if not user_data:
             await message.answer(
                 "Вы не зарегистрированы. Используйте /register для регистрации.",
-                reply_markup=main
+                reply_markup=kb.main
             )
             return
 
@@ -374,55 +389,43 @@ async def cmd_profile(message: Message, db: Database):
                     photo=photo_id,
                     caption=profile_text,
                     parse_mode="HTML",
-                    reply_markup=profile_keyboard
+                    reply_markup=kb.profile_keyboard
                 )
             except Exception as e:
-                logging.error(f"Ошибка ��ри отправке фото профиля: {e}")
+                logging.error(f"Ошибка при отправке фото профиля: {e}")
                 await message.answer(
                     profile_text,
                     parse_mode="HTML",
-                    reply_markup=profile_keyboard
+                    reply_markup=kb.profile_keyboard
                 )
         else:
             await message.answer(
                 profile_text,
                 parse_mode="HTML",
-                reply_markup=profile_keyboard
+                reply_markup=kb.profile_keyboard
             )
             
     except Exception as e:
         logging.error(f"Ошибка при отображении профиля: {e}")
         await message.answer(
             "Произошла ошибка при загрузке профиля. Попробуйте позже.",
-            reply_markup=main
+            reply_markup=kb.main
         )
 
 @router.callback_query(F.data.startswith('add_to_cart_'))
 async def add_to_cart(callback: CallbackQuery, db: Database):
     """Добавление товара в корзину"""
     product_id = int(callback.data.split('_')[3])
-    user_id = callback.from_user.id
+    quantity = int(callback.message.reply_markup.inline_keyboard[0][1].text.split()[0])
     
-    # Получаем текущее количество товара в корзине
-    current_quantity = await db.get_cart_item_quantity(user_id, product_id)
-    
-    # Создаем клавиатуру для выбора количества
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="➖", callback_data=f"qty_minus_{product_id}"),
-            InlineKeyboardButton(text=f"{current_quantity + 1}", callback_data="current_qty"),
-            InlineKeyboardButton(text="➕", callback_data=f"qty_plus_{product_id}")
-        ],
-        [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_cart_{product_id}")]
-    ])
-    
-    product = await db.get_product_by_id(product_id)
-    await callback.message.answer(
-        f"📦 Товар: {product.name}\n"
-        f"💰 Цена: {product.price}₽\n"
-        f"🔢 Выберите количество:",
-        reply_markup=keyboard
-    )
+    if await db.add_to_cart(callback.from_user.id, product_id, quantity):
+        await callback.answer("✅ Товар добавлен в корзину")
+        # Обновляем сообщение, показывая текущее количество в корзине
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.product_actions(product_id, quantity)
+        )
+    else:
+        await callback.answer("❌ Ошибка при добавлении в корзину")
 
 @router.callback_query(F.data.startswith('qty_minus_'))
 async def decrease_quantity(callback: CallbackQuery, db: Database):
@@ -472,7 +475,7 @@ async def confirm_add_to_cart(callback: CallbackQuery, db: Database):
 async def clear_cart(message: Message, db: Database):
     """Очистка корзины"""
     if await db.clear_cart(message.from_user.id):
-        await message.answer("🗑️ Корзина очищена", reply_markup=main)
+        await message.answer("🗑️ Корзина очищена", reply_markup=kb.main)
     else:
         await message.answer("❌ Ошибка при очистке корзины")
 
@@ -496,3 +499,231 @@ async def checkout(message: Message, db: Database):
     ])
     
     await message.answer(order_text, reply_markup=keyboard)
+
+@router.callback_query(F.data.startswith("increase_"))
+async def increase_product_quantity(callback: CallbackQuery, db: Database):
+    """Увеличение количества товара перед добавлением в корзину"""
+    product_id = int(callback.data.split("_")[1])
+    product = await db.get_product_by_id(product_id)
+    current_quantity = int(callback.message.reply_markup.inline_keyboard[0][1].text.split()[0])
+    
+    if product and current_quantity < product.quantity:
+        new_quantity = current_quantity + 1
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.product_actions(product_id, new_quantity)
+        )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("decrease_"))
+async def decrease_product_quantity(callback: CallbackQuery):
+    """Уменьшение количества товара перед добавлением в корзину"""
+    product_id = int(callback.data.split("_")[1])
+    current_quantity = int(callback.message.reply_markup.inline_keyboard[0][1].text.split()[0])
+    
+    if current_quantity > 1:
+        new_quantity = current_quantity - 1
+        await callback.message.edit_reply_markup(
+            reply_markup=kb.product_actions(product_id, new_quantity)
+        )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("remove_from_cart_"))
+async def remove_from_cart(callback: CallbackQuery, db: Database):
+    """Удаление товара из корзины"""
+    try:
+        # Получаем ID товара из callback_data
+        product_id = int(callback.data.split("_")[-1])
+        
+        if await db.remove_from_cart(callback.from_user.id, product_id):
+            # Удаляем сообщение с товаром
+            await callback.message.delete()
+            
+            # Проверяем остались ли товары в корзине
+            cart_items = await db.get_cart(callback.from_user.id)
+            if cart_items:
+                # Показываем обновленную сумму
+                total = sum(product.price * quantity for product, quantity in cart_items)
+                await callback.message.answer(
+                    f"💰 Итого: {total}₽",
+                    reply_markup=kb.cart_summary_keyboard()
+                )
+            else:
+                await callback.message.answer(
+                    "🛒 Ваша корзина пуста",
+                    reply_markup=kb.main
+                )
+            await callback.answer("✅ Товар удален из корзины")
+        else:
+            await callback.answer("❌ Ошибка при удалении товара")
+    except Exception as e:
+        logging.error(f"Ошибка при удалении товара из корзины: {e}")
+        await callback.answer("❌ Произошла ошибка")
+
+@router.callback_query(F.data == "clear_cart")
+async def clear_cart_callback(callback: CallbackQuery, db: Database):
+    """Очистка корзины через callback"""
+    try:
+        if await db.clear_cart(callback.from_user.id):
+            # Просто отправляем новое сообщение
+            await callback.message.answer(
+                "🛒 Корзина очищена",
+                reply_markup=kb.main
+            )
+            # Пытаемся удалить сообщение с итоговой суммой
+            try:
+                await callback.message.delete()
+            except:
+                pass
+            await callback.answer("✅ Корзина очищена")
+        else:
+            await callback.answer("❌ Ошибка при очистке корзины")
+    except Exception as e:
+        logging.error(f"Ошибка при очистке корзины: {e}")
+        await callback.answer("❌ Произошла ошибка")
+
+@router.callback_query(F.data.startswith("cart_increase_"))
+async def cart_increase_quantity(callback: CallbackQuery, db: Database):
+    """Увеличение количества товара в корзине"""
+    try:
+        product_id = int(callback.data.split("_")[2])
+        current_quantity = await db.get_cart_item_quantity(callback.from_user.id, product_id)
+        product = await db.get_product_by_id(product_id)
+        
+        if product and current_quantity < product.quantity:
+            new_quantity = current_quantity + 1
+            if await db.add_to_cart(callback.from_user.id, product_id, new_quantity):
+                # Обновляем текст сообщения с новой суммой
+                item_total = product.price * new_quantity
+                text = (
+                    f"📦 {product.name}\n"
+                    f"💰 {product.price}₽ x {new_quantity} шт. = {item_total}₽"
+                )
+                
+                if product.photo_id:
+                    await callback.message.edit_caption(
+                        caption=text,
+                        reply_markup=kb.cart_item_keyboard(product_id, new_quantity)
+                    )
+                else:
+                    await callback.message.edit_text(
+                        text=text,
+                        reply_markup=kb.cart_item_keyboard(product_id, new_quantity)
+                    )
+                
+                # Обновляем общую сумму
+                await update_cart_total(callback.message, callback.from_user.id, db)
+                await callback.answer("✅ Количество обновлено")
+            else:
+                await callback.answer("❌ Ошибка при обновлении количества")
+        else:
+            await callback.answer("❌ Достигнуто максимальное количество")
+    except Exception as e:
+        logging.error(f"Ошибка при увеличении количества: {e}")
+        await callback.answer("❌ Произошла ошибка")
+
+@router.callback_query(F.data.startswith("cart_decrease_"))
+async def cart_decrease_quantity(callback: CallbackQuery, db: Database):
+    """Уменьшение количества товара в корзине"""
+    try:
+        product_id = int(callback.data.split("_")[2])
+        current_quantity = await db.get_cart_item_quantity(callback.from_user.id, product_id)
+        product = await db.get_product_by_id(product_id)
+        
+        if current_quantity > 1:
+            new_quantity = current_quantity - 1
+            if await db.add_to_cart(callback.from_user.id, product_id, new_quantity):
+                # Обновляем текст сообщения с новой суммой
+                item_total = product.price * new_quantity
+                text = (
+                    f"📦 {product.name}\n"
+                    f"💰 {product.price}₽ x {new_quantity} шт. = {item_total}₽"
+                )
+                
+                if product.photo_id:
+                    await callback.message.edit_caption(
+                        caption=text,
+                        reply_markup=kb.cart_item_keyboard(product_id, new_quantity)
+                    )
+                else:
+                    await callback.message.edit_text(
+                        text=text,
+                        reply_markup=kb.cart_item_keyboard(product_id, new_quantity)
+                    )
+                
+                # Обновляем общую сумму
+                await update_cart_total(callback.message, callback.from_user.id, db)
+                await callback.answer("✅ Количество обновлено")
+            else:
+                await callback.answer("❌ Ошибка при обновлении количества")
+        else:
+            await callback.answer("❌ Минимальное количество: 1")
+    except Exception as e:
+        logging.error(f"Ошибк�� при уменьшении количества: {e}")
+        await callback.answer("❌ Произошла ошибка")
+
+@router.message(F.text == "🛒 Корзина")
+async def show_cart(message: Message, db: Database):
+    """Показ корзины"""
+    try:
+        cart_items = await db.get_cart(message.from_user.id)
+        if not cart_items:
+            await message.answer(
+                "🛒 Ваша корзина пуста",
+                reply_markup=kb.main
+            )
+            return
+
+        total = 0
+        # Показываем каждый товар отдельным сообщением с кнопками управления
+        for product, quantity in cart_items:
+            item_total = product.price * quantity
+            total += item_total
+            
+            text = (
+                f"📦 {product.name}\n"
+                f"💰 {product.price}₽ x {quantity} шт. = {item_total}₽"
+            )
+            
+            if product.photo_id:
+                await message.answer_photo(
+                    photo=product.photo_id,
+                    caption=text,
+                    reply_markup=kb.cart_item_keyboard(product.product_id, quantity)
+                )
+            else:
+                await message.answer(
+                    text,
+                    reply_markup=kb.cart_item_keyboard(product.product_id, quantity)
+                )
+        
+        # В конце показываем итоговую сумму и общие кнопки корзины
+        await message.answer(
+            f"💰 Итого: {total}₽",
+            reply_markup=kb.cart_summary_keyboard()
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при отображении корзины: {e}")
+        await message.answer(
+            "Произошла ошибка при загрузке корзины",
+            reply_markup=kb.main
+        )
+
+async def update_cart_total(message: Message, user_id: int, db: Database):
+    """Обновление общей суммы корзины"""
+    try:
+        cart_items = await db.get_cart(user_id)
+        if cart_items:
+            total = sum(product.price * quantity for product, quantity in cart_items)
+            # Отправляем новое сообщение с обновленной суммой
+            await message.answer(
+                f"💰 Итого: {total}₽",
+                reply_markup=kb.cart_summary_keyboard()
+            )
+        else:
+            # Если корзина пуста
+            await message.answer(
+                "🛒 Ваша корзина пуста",
+                reply_markup=kb.main
+            )
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении суммы корзины: {e}")
