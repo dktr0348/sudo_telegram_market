@@ -57,4 +57,5 @@ class EditProduct(StatesGroup):
     edit_price = State()
     edit_photo = State()
     edit_category = State()
+    edit_quantity = State()
     confirm = State()

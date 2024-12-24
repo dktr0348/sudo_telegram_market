@@ -28,7 +28,7 @@ cart_keyboard = ReplyKeyboardMarkup(keyboard=[
 # Клавиатура для основных команд
 main_command = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text='🛍️ Каталог', callback_data='catalog'),
+        InlineKeyboardButton(text='🛍️ Катал��г', callback_data='catalog'),
         InlineKeyboardButton(text='🛒 Корзина', callback_data='cart')
     ],
     [
@@ -128,7 +128,7 @@ async def categories():
         
         return keyboard.adjust(2).as_markup()
     except Exception as e:
-        logging.error(f"Ошибка при создании клавиатуры категорий: {e}")
+        logging.error(f"Ошибка пр�� создании клавиатуры категорий: {e}")
         return None
 
 # Клавиатура для выбора продукта
@@ -268,7 +268,7 @@ async def edit_product_kb():
         
         if not all_products:
             keyboard.add(InlineKeyboardButton(
-                text="Нет доступных товаров",
+                text="Нет д��ступных товаров",
                 callback_data="no_products"
             ))
         else:
@@ -295,10 +295,13 @@ edit_product_fields = InlineKeyboardMarkup(inline_keyboard=[
     ],
     [
         InlineKeyboardButton(text="💰 Цена", callback_data="edit_field_price"),
+        InlineKeyboardButton(text="🔢 Количество", callback_data="edit_field_quantity")
+    ],
+    [
+        InlineKeyboardButton(text="📷 Фото", callback_data="edit_field_photo"),
         InlineKeyboardButton(text="📁 Категория", callback_data="edit_field_category")
     ],
-    [InlineKeyboardButton(text="📷 Фото", callback_data="edit_field_photo")],
-    [InlineKeyboardButton(text="◀️ Отмена", callback_data="cancel_edit")]
+    [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_admin_menu")]
 ])
 
 def product_actions(product_id: int) -> InlineKeyboardMarkup:
@@ -404,15 +407,21 @@ async def products_by_category(category_id: int):
 
 edit_product = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text="📝 Название", callback_data="edit_name"),
-        InlineKeyboardButton(text="📋 Описание", callback_data="edit_description")
+        InlineKeyboardButton(text="📝 Название", callback_data="edit_field_name"),
+        InlineKeyboardButton(text="📋 Описание", callback_data="edit_field_description")
     ],
     [
-        InlineKeyboardButton(text="💰 Цена", callback_data="edit_price"),
-        InlineKeyboardButton(text="📁 Категория", callback_data="edit_category")
+        InlineKeyboardButton(text="💰 Цена", callback_data="edit_field_price"),
+        InlineKeyboardButton(text="🔢 Количество", callback_data="edit_field_quantity")
     ],
-    [InlineKeyboardButton(text="📷 Фото", callback_data="edit_photo")],
-    [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_menu")]
+    [
+        InlineKeyboardButton(text="📷 Фото", callback_data="edit_field_photo"),
+        InlineKeyboardButton(text="📁 Категория", callback_data="edit_field_category")
+    ],
+    [
+        InlineKeyboardButton(text="◀️ К категориям", callback_data="back_to_admin_categories"),
+        InlineKeyboardButton(text="🏠 В меню", callback_data="back_to_admin_menu")
+    ]
 ])
 
 async def admin_products_by_category(category_id: int):
@@ -449,3 +458,75 @@ skip_location = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='⏩ Пропустить')],
     [KeyboardButton(text='❌ Отмена регистрации')]
 ], resize_keyboard=True)
+
+async def admin_categories_kb():
+    """Клавиатура для выбора категории (админская версия)"""
+    try:
+        all_categories = await db.get_categories()
+        categories_list = [cat for cat in all_categories]
+        
+        keyboard = InlineKeyboardBuilder()
+        
+        if not categories_list:
+            keyboard.add(InlineKeyboardButton(
+                text="Нет доступных категорий",
+                callback_data="no_categories"
+            ))
+        else:
+            for category in categories_list:
+                keyboard.add(InlineKeyboardButton(
+                    text=category.name,
+                    callback_data=f'admin_category_{category.id}'
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data="back_to_admin_menu"
+        ))
+        
+        return keyboard.adjust(2).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании админской клавиатуры категорий: {e}")
+        return None
+
+async def admin_products_by_category_kb(category_id: int):
+    """Клавиатура для выбора товара из категории (админская версия)"""
+    try:
+        products = await db.get_products_by_category(category_id)
+        keyboard = InlineKeyboardBuilder()
+        
+        if not products:
+            keyboard.add(InlineKeyboardButton(
+                text="В этой категории нет товаров",
+                callback_data="no_products"
+            ))
+        else:
+            for product in products:
+                keyboard.add(InlineKeyboardButton(
+                    text=f"{product.name} - {product.price}₽",
+                    callback_data=f'admin_product_{product.product_id}'
+                ))
+                
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Назад к категориям",
+            callback_data="back_to_admin_categories"
+        ))
+        
+        return keyboard.adjust(1).as_markup()
+    except Exception as e:
+        logging.error(f"Ошибка при создании админской клавиатуры товаров: {e}")
+        return None
+
+cancel_button = KeyboardButton(text="❌ Отменить")
+cancel_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[cancel_button]], 
+    resize_keyboard=True
+)
+
+skip_photo_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="⏩ Пропустить фото")],
+        [KeyboardButton(text="❌ Отменить")]
+    ],
+    resize_keyboard=True
+)
