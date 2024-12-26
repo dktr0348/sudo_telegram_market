@@ -3,17 +3,20 @@ from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import src.database.requests as db
 import logging
-# Главное меню
+# Главное меню с поиском и избранным
 main = ReplyKeyboardMarkup(keyboard=[
-    [
-        KeyboardButton(text='👤 Регистрация'),
-        KeyboardButton(text='🔑 Авторизация')
-    ],
     [
         KeyboardButton(text='🛍️ Каталог'),
         KeyboardButton(text='🛒 Корзина')
     ],
-    [KeyboardButton(text='🏠 В главное меню')]
+    [
+        KeyboardButton(text='📋 Мои заказы'),
+        KeyboardButton(text='💳 Оплатить')
+    ],
+    [
+        KeyboardButton(text='👤 Профиль'),
+        KeyboardButton(text='🔍 Поиск')
+    ]
 ], resize_keyboard=True)
 
 # Клавиатура для корзины
@@ -28,7 +31,7 @@ cart_keyboard = ReplyKeyboardMarkup(keyboard=[
 # Клавиатура для основных команд
 main_command = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text='🛍️ Катал����г', callback_data='catalog'),
+        InlineKeyboardButton(text='🛍️ Каталг', callback_data='catalog'),
         InlineKeyboardButton(text='🛒 Корзина', callback_data='cart')
     ],
     [
@@ -85,7 +88,7 @@ cancel_kb = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text="❌ Отменить редактирование")]
 ], resize_keyboard=True)
 
-# Клавиатура для профиля
+# Обновленная клавиатура профиля
 profile_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text='✏️ Изменить имя', callback_data='edit_name'),
@@ -99,7 +102,13 @@ profile_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         InlineKeyboardButton(text='📷 Изменить фото', callback_data='edit_photo'),
         InlineKeyboardButton(text='📍 Изменить локацию', callback_data='edit_location')
     ],
-    [InlineKeyboardButton(text='◀️ Назад', callback_data='back')]
+    [
+        InlineKeyboardButton(text='🛒 Корзина', callback_data='show_cart'),
+        InlineKeyboardButton(text='❤️ Избранное', callback_data='show_favorites')
+    ],
+    [
+        InlineKeyboardButton(text='📋 Мои заказы', callback_data='show_orders')
+    ]
 ])
 
 # Клавиатура для выбора категории
@@ -554,3 +563,103 @@ def cart_summary_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🛍️ Продолжить покупки", callback_data="continue_shopping")
         ]
     ])
+
+def delivery_method_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора способа доставки"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🚚 Курьером", callback_data="delivery_courier"),
+            InlineKeyboardButton(text="🏪 Самовывоз", callback_data="delivery_pickup")
+        ],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_checkout")]
+    ])
+
+def payment_method_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура выбора способа опла��ы"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💵 Наличными", callback_data="payment_cash"),
+            InlineKeyboardButton(text="💳 Картой", callback_data="payment_card")
+        ],
+        [
+            InlineKeyboardButton(text="🌐 Онлайн", callback_data="payment_online")
+        ],
+        [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_checkout")]
+    ])
+
+def confirm_order_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура подтверждения заказа"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_order"),
+            InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_checkout")
+        ]
+    ])
+
+main_inline = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🛍️ Каталог", callback_data="show_catalog"),
+        InlineKeyboardButton(text="🛒 Корзина", callback_data="show_cart")
+    ],
+    [
+        InlineKeyboardButton(text="👤 Профиль", callback_data="show_profile"),
+        InlineKeyboardButton(text="📋 Мои заказы", callback_data="show_orders")
+    ]
+])
+
+# Клавиатура для товара с кнопкой избранного
+def product_keyboard(product_id: int, is_favorite: bool = False):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="❤️" if is_favorite else "🤍",
+                callback_data=f"toggle_favorite_{product_id}"
+            ),
+            InlineKeyboardButton(
+                text="🛒 В корзину",
+                callback_data=f"add_to_cart_{product_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⭐ Оставить отзыв",
+                callback_data=f"review_{product_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="◀️ Назад",
+                callback_data="back_to_catalog"
+            )
+        ]
+    ])
+
+# Клавиатура для каталога с фильтрами
+catalog_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🔍 Фильтры", callback_data="filter_products"),
+        InlineKeyboardButton(text="❤️ Избранное", callback_data="show_favorites")
+    ],
+    [
+        InlineKeyboardButton(text="💰 По цене ⬆️", callback_data="sort_price_asc"),
+        InlineKeyboardButton(text="💰 По цене ⬇️", callback_data="sort_price_desc")
+    ],
+    [
+        InlineKeyboardButton(text="⭐ По рейтингу", callback_data="sort_rating"),
+        InlineKeyboardButton(text="🔤 По названию", callback_data="sort_name")
+    ]
+])
+
+# Клавиатура для отзыва
+review_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="⭐", callback_data="rate_1"),
+        InlineKeyboardButton(text="⭐⭐", callback_data="rate_2"),
+        InlineKeyboardButton(text="⭐⭐⭐", callback_data="rate_3"),
+        InlineKeyboardButton(text="⭐⭐⭐⭐", callback_data="rate_4"),
+        InlineKeyboardButton(text="⭐⭐⭐⭐⭐", callback_data="rate_5")
+    ],
+    [
+        InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_review")
+    ]
+])

@@ -5,9 +5,12 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.future import select
-from sqlalchemy import update, delete
+from sqlalchemy import update, delete, or_
+from sqlalchemy.orm import joinedload
 
-from .models import Base, User, UserProfile, Product, Cart
+from .models import Base, User, UserProfile, Product, Cart, Order, OrderItem
+from .models import DeliveryMethod, PaymentMethod, OrderStatus
+from .models import Favorite, Review
 
 class Database:
     def __init__(self, database_url: str):
@@ -282,4 +285,212 @@ class Database:
                 return True
         except Exception as e:
             logging.error(f"Ошибка при удалении товара из корзины: {e}")
+            return False
+
+    async def create_order(self, user_id: int, delivery_address: str, 
+                          delivery_method: str, payment_method: str,
+                          total_amount: float, items: list) -> Order:
+        """Создание нового заказа"""
+        try:
+            async with self.async_session() as session:
+                # Создаем заказ
+                order = Order(
+                    user_id=user_id,
+                    delivery_address=delivery_address,
+                    delivery_method=DeliveryMethod(delivery_method),
+                    payment_method=PaymentMethod(payment_method),
+                    total_amount=total_amount,
+                    status=OrderStatus.NEW
+                )
+                session.add(order)
+                await session.flush()
+                
+                # Добавляем товары заказа
+                for product, quantity in items:
+                    order_item = OrderItem(
+                        order_id=order.order_id,
+                        product_id=product.product_id,
+                        quantity=quantity,
+                        price=product.price
+                    )
+                    session.add(order_item)
+                
+                await session.commit()
+                return order
+        except Exception as e:
+            logging.error(f"Ошибка при создании заказа: {e}")
+            return None
+
+    async def get_user_orders(self, user_id: int) -> List[Order]:
+        """Получение списка заказов пользователя"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Order).where(Order.user_id == user_id)
+                result = await session.execute(stmt)
+                return result.scalars().all()
+        except Exception as e:
+            logging.error(f"Ошибка при получении заказов: {e}")
+            return []
+
+    async def update_order_status(self, order_id: int, new_status: OrderStatus) -> bool:
+        """Обновление статуса заказа"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Order).where(Order.order_id == order_id)
+                result = await session.execute(stmt)
+                order = result.scalar_one_or_none()
+                
+                if order:
+                    order.status = new_status
+                    await session.commit()
+                    return True
+                return False
+        except Exception as e:
+            logging.error(f"Ошибка при обновлении статуса заказа: {e}")
+            return False
+
+    async def get_order_by_id(self, order_id: int) -> Optional[Order]:
+        """Получение заказа по ID"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Order).options(
+                    joinedload(Order.items).joinedload(OrderItem.product)
+                ).where(Order.order_id == order_id)
+                result = await session.execute(stmt)
+                return result.unique().scalar_one_or_none()
+        except Exception as e:
+            logging.error(f"Ошибка при получении заказа: {e}")
+            return None
+
+    async def get_order_items(self, order_id: int) -> List[OrderItem]:
+        """Получение товаров заказа"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(OrderItem).options(
+                    joinedload(OrderItem.product)
+                ).where(OrderItem.order_id == order_id)
+                result = await session.execute(stmt)
+                return result.unique().scalars().all()
+        except Exception as e:
+            logging.error(f"Ошибка при получении товаров заказа: {e}")
+            return []
+
+    async def search_products(self, query: str) -> List[Product]:
+        """Поиск товаров по названию или описанию"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Product).where(
+                    or_(
+                        Product.name.ilike(f"%{query}%"),
+                        Product.description.ilike(f"%{query}%")
+                    )
+                )
+                result = await session.execute(stmt)
+                return result.scalars().all()
+        except Exception as e:
+            logging.error(f"Ошибка при поиске товаров: {e}")
+            return []
+
+    async def get_products_filtered(
+        self, 
+        category_id: Optional[int] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        sort_by: str = 'name',
+        sort_order: str = 'asc'
+    ) -> List[Product]:
+        """Получение отфильтрованных и отсортированных товаров"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Product)
+                
+                # Фильтры
+                if category_id:
+                    stmt = stmt.where(Product.category_id == category_id)
+                if min_price is not None:
+                    stmt = stmt.where(Product.price >= min_price)
+                if max_price is not None:
+                    stmt = stmt.where(Product.price <= max_price)
+                
+                # Сортировка
+                if sort_by == 'price':
+                    order_by = Product.price.asc() if sort_order == 'asc' else Product.price.desc()
+                elif sort_by == 'rating':
+                    # Здесь можно добавить сортировку по рейтингу
+                    pass
+                else:  # по умолчанию по имени
+                    order_by = Product.name.asc() if sort_order == 'asc' else Product.name.desc()
+                
+                stmt = stmt.order_by(order_by)
+                result = await session.execute(stmt)
+                return result.scalars().all()
+        except Exception as e:
+            logging.error(f"Ошибка при получении отфильтрованных товаров: {e}")
+            return []
+
+    async def toggle_favorite(self, user_id: int, product_id: int) -> bool:
+        """Добавление/удаление товара из избранного"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Favorite).where(
+                    Favorite.user_id == user_id,
+                    Favorite.product_id == product_id
+                )
+                result = await session.execute(stmt)
+                favorite = result.scalar_one_or_none()
+                
+                if favorite:
+                    await session.delete(favorite)
+                else:
+                    favorite = Favorite(user_id=user_id, product_id=product_id)
+                    session.add(favorite)
+                
+                await session.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Ошибка при работе с избранным: {e}")
+            return False
+
+    async def add_review(self, user_id: int, product_id: int, rating: int, text: str) -> bool:
+        """Добавление отзыва о товаре"""
+        try:
+            async with self.async_session() as session:
+                review = Review(
+                    user_id=user_id,
+                    product_id=product_id,
+                    rating=rating,
+                    text=text
+                )
+                session.add(review)
+                await session.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Ошибка при добавлении отзыва: {e}")
+            return False
+
+    async def get_user_favorites(self, user_id: int) -> List[Favorite]:
+        """Получение избранных товаров пользователя"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Favorite).options(
+                    joinedload(Favorite.product)
+                ).where(Favorite.user_id == user_id)
+                result = await session.execute(stmt)
+                return result.unique().scalars().all()
+        except Exception as e:
+            logging.error(f"Ошибка при получении избранного: {e}")
+            return []
+
+    async def is_favorite(self, user_id: int, product_id: int) -> bool:
+        """Проверка, находится ли товар в избранном"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Favorite).where(
+                    Favorite.user_id == user_id,
+                    Favorite.product_id == product_id
+                )
+                result = await session.execute(stmt)
+                return result.scalar_one_or_none() is not None
+        except Exception as e:
+            logging.error(f"Ошибка при проверке избранного: {e}")
             return False

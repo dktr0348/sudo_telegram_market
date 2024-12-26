@@ -5,14 +5,22 @@ from aiogram.types import (Message, CallbackQuery, ReplyKeyboardRemove,
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from ..database.database import Database
+from ..database.models import OrderStatus
 import src.keyboards as kb
 from ..state import Register
 from ..database import requests as db
 import logging
 import re
 from typing import Union
+from aiogram.fsm.state import State, StatesGroup
 
 router = Router()
+
+# Добавим состояния для поиска и отзывов
+class ProductStates(StatesGroup):
+    waiting_for_search = State()
+    waiting_for_review = State()
+    waiting_for_rating = State()
 
 async def send_with_inline_kb(message: Message, text: str, inline_kb: InlineKeyboardMarkup):
     """Отправка сообщения с inline клавиатурой и скрытием reply клавиатуры"""
@@ -144,36 +152,58 @@ async def show_category_products(callback: CallbackQuery):
 @router.callback_query(F.data.startswith('product_'))
 async def show_product_details(callback: CallbackQuery, db: Database):
     """Показ деталей товара"""
-    product_id = int(callback.data.split('_')[1])
-    product = await db.get_product_by_id(product_id)
-    
-    if product:
-        # Получаем текущее количество в корзине
-        current_quantity = await db.get_cart_item_quantity(callback.from_user.id, product_id)
+    try:
+        product_id = int(callback.data.split("_")[1])
+        product = await db.get_product_by_id(product_id)
         
-        text = (
-            f"📦 <b>{product.name}</b>\n\n"
-            f"📝 {product.description}\n\n"
-            f"💰 Цена: {product.price}₽\n"
-            f"✅ В наличии: {product.quantity} шт.\n"
-        )
-        
-        if product.photo_id:
-            await callback.message.delete()
-            await callback.message.answer_photo(
-                photo=product.photo_id,
-                caption=text,
-                reply_markup=kb.product_actions(product_id, current_quantity or 1),
-                parse_mode="HTML"
+        if product:
+            # Проверяем, находится ли товар в избранном
+            is_favorite = await db.is_favorite(callback.from_user.id, product_id)
+            
+            text = (
+                f"📦 {product.name}\n"
+                f"💰 Цена: {product.price}₽\n"
+                f"📝 Описание: {product.description}\n"
+                f"⭐ Рей��инг: {product.average_rating:.1f}\n"
+                f"{'❤️ В избранном' if is_favorite else '🤍 Не в избранном'}"
             )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="❤️ Убрать из избранного" if is_favorite else "🤍 В избранное",
+                        callback_data=f"toggle_favorite_{product_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🛒 В корзину",
+                        callback_data=f"add_to_cart_{product_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="◀️ Назад",
+                        callback_data="back_to_catalog"
+                    )
+                ]
+            ])
+            
+            if product.photo_id:
+                await callback.message.edit_caption(
+                    caption=text,
+                    reply_markup=keyboard
+                )
+            else:
+                await callback.message.edit_text(
+                    text,
+                    reply_markup=keyboard
+                )
         else:
-            await callback.message.edit_text(
-                text=text,
-                reply_markup=kb.product_actions(product_id, current_quantity or 1),
-                parse_mode="HTML"
-            )
-    else:
-        await callback.answer("Товар не найден")
+            await callback.answer("Товар не найден")
+    except Exception as e:
+        logging.error(f"Ошибка при показе товара: {e}")
+        await callback.answer("Произошла ошибка при загрузке товара")
 
 @router.callback_query(F.data == "back_to_categories")
 async def back_to_categories(callback: CallbackQuery):
@@ -317,7 +347,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
                 await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
         except Exception as e:
             logging.error(f"Ошибка при регистрации: {e}")
-            await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
+            await message.answer('Произошла ошибка при регистрации. Попробуйте п��зже.')
         finally:
             await state.clear()
     elif message.text == "Отменить":
@@ -373,7 +403,7 @@ async def cmd_profile(message: Message, db: Database):
         # Формируем текст профиля
         profile_text = (
             f"👤 <b>Ваш профиль</b>\n\n"
-            f"📝 Имя: {name or 'Не указано'}\n"
+            f"Имя: {name or 'Не указано'}\n"
             f"📱 Телефон: {phone or 'Не указан'}\n"
             f"📧 Email: {email or 'Не указан'}\n"
             f"🎂 Возраст: {age or 'Не указан'}\n"
@@ -406,7 +436,7 @@ async def cmd_profile(message: Message, db: Database):
             )
             
     except Exception as e:
-        logging.error(f"Ошибка при отображении профиля: {e}")
+        logging.error(f"Ошибка при отбражении профиля: {e}")
         await message.answer(
             "Произошла ошибка при загрузке профиля. Попробуйте позже.",
             reply_markup=kb.main
@@ -419,7 +449,7 @@ async def add_to_cart(callback: CallbackQuery, db: Database):
     quantity = int(callback.message.reply_markup.inline_keyboard[0][1].text.split()[0])
     
     if await db.add_to_cart(callback.from_user.id, product_id, quantity):
-        await callback.answer("✅ Товар добавлен в корзину")
+        await callback.answer("✅ Това�� добавлен в корзину")
         # Обновляем сообщение, показывая текущее количество в корзине
         await callback.message.edit_reply_markup(
             reply_markup=kb.product_actions(product_id, quantity)
@@ -658,7 +688,7 @@ async def cart_decrease_quantity(callback: CallbackQuery, db: Database):
         else:
             await callback.answer("❌ Минимальное количество: 1")
     except Exception as e:
-        logging.error(f"Ошибк�� при уменьшении количества: {e}")
+        logging.error(f"Ошибка при уменьшении количества: {e}")
         await callback.answer("❌ Произошла ошибка")
 
 @router.message(F.text == "🛒 Корзина")
@@ -668,7 +698,7 @@ async def show_cart(message: Message, db: Database):
         cart_items = await db.get_cart(message.from_user.id)
         if not cart_items:
             await message.answer(
-                "🛒 Ваша корзина пуста",
+                "🛒 Ваша корзин�� пуста",
                 reply_markup=kb.main
             )
             return
@@ -727,3 +757,297 @@ async def update_cart_total(message: Message, user_id: int, db: Database):
             )
     except Exception as e:
         logging.error(f"Ошибка при обновлении суммы корзины: {e}")
+
+@router.callback_query(F.data == "show_orders")
+async def show_orders_callback(callback: CallbackQuery, db: Database):
+    """Показ истории заказов"""
+    try:
+        orders = await db.get_user_orders(callback.from_user.id)
+        if not orders:
+            await callback.message.answer(
+                "У вас пока нет заказов",
+                reply_markup=kb.main
+            )
+            await callback.message.delete()
+            return
+
+        text = "📋 Ваши заказы:\n\n"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        
+        for order in orders:
+            text += (
+                f"Заказ №{order.order_id}\n"
+                f"Статус: {order.status.value}\n"
+                f"Сумма: {order.total_amount}₽\n"
+                f"Дата: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                "-------------------\n"
+            )
+            # Добавляем кнопку для каждого заказа
+            keyboard.inline_keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📦 Заказ №{order.order_id}",
+                    callback_data=f"order_details_{order.order_id}"
+                )
+            ])
+        
+        # Добавляем кнопку возврата
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_profile")
+        ])
+
+        await callback.message.answer(text, reply_markup=keyboard)
+        await callback.message.delete()
+    except Exception as e:
+        logging.error(f"Ошибка при показе заказов: {e}")
+        await callback.answer("Произошла ошибка при загрузке заказов")
+
+@router.message(F.text == "📋 Мои заказы")
+async def show_orders_command(message: Message, db: Database):
+    """Показ истории заказов через команду"""
+    try:
+        orders = await db.get_user_orders(message.from_user.id)
+        if not orders:
+            await message.answer(
+                "У вас пока нет заказов",
+                reply_markup=kb.main
+            )
+            return
+
+        text = "📋 Ваши заказы:\n\n"
+        for order in orders:
+            text += (
+                f"Заказ №{order.order_id}\n"
+                f"Статус: {order.status.value}\n"
+                f"Сумма: {order.total_amount}₽\n"
+                f"Дата: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                "-------------------\n"
+            )
+
+        await message.answer(text, reply_markup=kb.main)
+    except Exception as e:
+        logging.error(f"Ошибка при показе заказов: {e}")
+        await message.answer("Произошла ошибка при загрузке заказов")
+
+@router.message(F.text == "🔍 Поиск")
+async def start_search(message: Message, state: FSMContext):
+    """Начало поиска товаров"""
+    await state.set_state(ProductStates.waiting_for_search)
+    await message.answer(
+        "Введите название или описание товара для поиска:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Отменить поиск")]],
+            resize_keyboard=True
+        )
+    )
+
+@router.message(ProductStates.waiting_for_search)
+async def process_search(message: Message, state: FSMContext, db: Database):
+    """Обработка поискового запроса"""
+    if message.text == "❌ Отменить поиск":
+        await state.clear()
+        await message.answer("Поиск отменен", reply_markup=kb.main)
+        return
+
+    products = await db.search_products(message.text)
+    if not products:
+        await message.answer(
+            "По вашему запросу ничего не найдено",
+            reply_markup=kb.main
+        )
+        await state.clear()
+        return
+
+    text = "🔍 Результаты поиска:\n\n"
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    
+    for product in products:
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{product.name} - {product.price}₽",
+                callback_data=f"product_{product.product_id}"
+            )
+        ])
+    
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_catalog")
+    ])
+    
+    await message.answer(text, reply_markup=keyboard)
+    await state.clear()
+
+@router.callback_query(F.data == "filter_products")
+async def show_filters(callback: CallbackQuery):
+    """Показ фильтров для товаров"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💰 По цене ⬆️", callback_data="sort_price_asc"),
+            InlineKeyboardButton(text="💰 По цене ⬇️", callback_data="sort_price_desc")
+        ],
+        [
+            InlineKeyboardButton(text="⭐ По рейтингу", callback_data="sort_rating"),
+            InlineKeyboardButton(text="🔤 По названию", callback_data="sort_name")
+        ],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_catalog")]
+    ])
+    
+    await callback.message.edit_text(
+        "Выберите способ сортировки:",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(F.data.startswith("sort_"))
+async def sort_products(callback: CallbackQuery, db: Database):
+    """Сортировка товаров"""
+    sort_type = callback.data.split('_')[1]
+    sort_order = callback.data.split('_')[2] if len(callback.data.split('_')) > 2 else 'asc'
+    
+    products = await db.get_products_filtered(sort_by=sort_type, sort_order=sort_order)
+    if not products:
+        await callback.answer("Товары не найдены")
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    for product in products:
+        rating_stars = "⭐" * round(product.average_rating)
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(
+                text=f"{product.name} - {product.price}₽ {rating_stars}",
+                callback_data=f"product_{product.product_id}"
+            )
+        ])
+    
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="🔍 Фильтры", callback_data="filter_products")
+    ])
+    keyboard.inline_keyboard.append([
+        InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_catalog")
+    ])
+    
+    await callback.message.edit_text(
+        "Выберите товар:",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(F.data == "show_favorites")
+async def show_favorites(callback: CallbackQuery, db: Database):
+    """Показ избранных товаров"""
+    try:
+        favorites = await db.get_user_favorites(callback.from_user.id)
+        
+        # Сначала отправляем новое сообщение
+        text = "❤️ Избранные товары:\n\n" if favorites else "У вас пока нет избранных товаров"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+        
+        if favorites:
+            for favorite in favorites:
+                product = favorite.product
+                rating_stars = "⭐" * round(product.average_rating)
+                keyboard.inline_keyboard.append([
+                    InlineKeyboardButton(
+                        text=f"{product.name} - {product.price}₽ {rating_stars}",
+                        callback_data=f"product_{product.product_id}"
+                    )
+                ])
+        
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_profile")
+        ])
+        
+        # Отправляем новое сообщение вместо редактирования
+        await callback.message.answer(text, reply_markup=keyboard)
+        # Удаляем предыдущее сообщение
+        await callback.message.delete()
+        
+    except Exception as e:
+        logging.error(f"Ошибка при показе избранного: {e}")
+        await callback.answer("Произошла ошибка при загрузке избранного")
+
+@router.callback_query(F.data.startswith("toggle_favorite_"))
+async def toggle_favorite(callback: CallbackQuery, db: Database):
+    """Добавление/удаление из избранного"""
+    try:
+        product_id = int(callback.data.split("_")[2])
+        result = await db.toggle_favorite(callback.from_user.id, product_id)
+        
+        if result:
+            # Проверяем новый статус избранного
+            is_favorite = await db.is_favorite(callback.from_user.id, product_id)
+            await callback.answer(
+                "✅ Добавлено в избранное" if is_favorite else "❌ Удалено из избранного"
+            )
+            # Обновляем отображение товара
+            await show_product_details(callback, db)
+        else:
+            await callback.answer("❌ Произошла ошибка")
+    except Exception as e:
+        logging.error(f"Ошибка при работе с избранным: {e}")
+        await callback.answer("Произошла ошибка")
+
+@router.message(F.text == "👤 Профиль")
+async def show_profile_command(message: Message, db: Database):
+    """Показ профиля через команду в главном меню"""
+    await cmd_profile(message, db)
+
+@router.callback_query(F.data.startswith("order_details_"))
+async def show_order_details(callback: CallbackQuery, db: Database):
+    """Показ деталей заказа"""
+    try:
+        order_id = int(callback.data.split("_")[2])
+        order = await db.get_order_by_id(order_id)
+        
+        if order:
+            # Получаем товары заказа
+            items = await db.get_order_items(order_id)
+            
+            text = (
+                f"📦 Заказ №{order.order_id}\n"
+                f"📅 Дата: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                f"📊 Статус: {order.status.value}\n"
+                f"💰 Сумма: {order.total_amount}₽\n"
+                f"🚚 Способ доставки: {order.delivery_method.value}\n"
+                f"📍 Адрес: {order.delivery_address}\n"
+                f"💳 Способ оплаты: {order.payment_method.value}\n\n"
+                "📋 Состав заказа:\n"
+            )
+            
+            for item in items:
+                text += f"• {item.product.name} x {item.quantity} шт. = {item.price * item.quantity}₽\n"
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад к заказам", callback_data="show_orders")]
+            ])
+            
+            await callback.message.edit_text(text, reply_markup=keyboard)
+        else:
+            await callback.answer("Заказ не найден")
+    except Exception as e:
+        logging.error(f"Ошибка при показе деталей заказа: {e}")
+        await callback.answer("Произошла ошибка при загрузке деталей заказа")
+
+@router.callback_query(F.data == "back_to_profile")
+async def back_to_profile(callback: CallbackQuery, db: Database):
+    """Возврат к профилю"""
+    try:
+        profile = await db.get_user_profile(callback.from_user.id)
+        if profile:
+            user_id, name, phone, email, lat, lon, age, photo_id, reg_date, username = profile
+            
+            text = (
+                f"👤 Профиль\n\n"
+                f"Имя: {name}\n"
+                f"Телефон: {phone}\n"
+                f"Email: {email}\n"
+                f"Возраст: {age}\n"
+                f"Дата регистрации: {reg_date}\n"
+                f"Username: @{username}"
+            )
+            
+            await callback.message.edit_text(text, reply_markup=kb.profile_keyboard)
+        else:
+            await callback.message.edit_text(
+                "Профиль не найден. Пожалуйста, зарегистрируйтесь.",
+                reply_markup=kb.main_inline
+            )
+    except Exception as e:
+        logging.error(f"Ошибка при возврате к профилю: {e}")
+        await callback.answer("Произошла ошибка")
