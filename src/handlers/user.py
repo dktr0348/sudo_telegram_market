@@ -61,7 +61,7 @@ async def show_cart(event: Union[Message, CallbackQuery], db: Database):
             return
 
         total = 0
-        # Показываем каждый товар отдельным сообщением с кнопками управления
+        # Показываем каждый товар отдельным сообщением с кнопками ��правления
         for product, quantity in cart_items:
             item_total = product.price * quantity
             total += item_total
@@ -160,11 +160,15 @@ async def show_product_details(callback: CallbackQuery, db: Database):
             # Проверяем, находится ли товар в избранном
             is_favorite = await db.is_favorite(callback.from_user.id, product_id)
             
+            # Вычисляем рейтинг
+            rating = product.average_rating if product.reviews else 0
+            rating_stars = "⭐" * round(rating)
+            
             text = (
                 f"📦 {product.name}\n"
                 f"💰 Цена: {product.price}₽\n"
                 f"📝 Описание: {product.description}\n"
-                f"⭐ Рей��инг: {product.average_rating:.1f}\n"
+                f"{rating_stars} Рейтинг: {rating:.1f}\n"
                 f"{'❤️ В избранном' if is_favorite else '🤍 Не в избранном'}"
             )
             
@@ -347,7 +351,7 @@ async def process_confirm(message: Message, state: FSMContext, db: Database):
                 await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
         except Exception as e:
             logging.error(f"Ошибка при регистрации: {e}")
-            await message.answer('Произошла ошибка при регистрации. Попробуйте п��зже.')
+            await message.answer('Произошла ошибка при регистрации. Попробуйте позже.')
         finally:
             await state.clear()
     elif message.text == "Отменить":
@@ -406,7 +410,7 @@ async def cmd_profile(message: Message, db: Database):
             f"Имя: {name or 'Не указано'}\n"
             f"📱 Телефон: {phone or 'Не указан'}\n"
             f"📧 Email: {email or 'Не указан'}\n"
-            f"🎂 Возраст: {age or 'Не указан'}\n"
+            f"🎂 Возраст: {age or 'Не ука��ан'}\n"
             f"📍 Локация: {'Указана' if lat and lon else 'Не указана'}\n"
             f"📅 Дата регистрации: {reg_date_formatted}\n"
             f"🆔 Username: @{username or 'Не указан'}"
@@ -438,7 +442,7 @@ async def cmd_profile(message: Message, db: Database):
     except Exception as e:
         logging.error(f"Ошибка при отбражении профиля: {e}")
         await message.answer(
-            "Произошла ошибка при загрузке профиля. Попробуйте позже.",
+            "Произош��а ошибка при загрузке профиля. Попробуйте позже.",
             reply_markup=kb.main
         )
 
@@ -449,7 +453,7 @@ async def add_to_cart(callback: CallbackQuery, db: Database):
     quantity = int(callback.message.reply_markup.inline_keyboard[0][1].text.split()[0])
     
     if await db.add_to_cart(callback.from_user.id, product_id, quantity):
-        await callback.answer("✅ Това�� добавлен в корзину")
+        await callback.answer("✅ Товар добавлен в корзину")
         # Обновляем сообщение, показывая текущее количество в корзине
         await callback.message.edit_reply_markup(
             reply_markup=kb.product_actions(product_id, quantity)
@@ -698,7 +702,7 @@ async def show_cart(message: Message, db: Database):
         cart_items = await db.get_cart(message.from_user.id)
         if not cart_items:
             await message.answer(
-                "🛒 Ваша корзин�� пуста",
+                "🛒 Ваша корзина пуста",
                 reply_markup=kb.main
             )
             return

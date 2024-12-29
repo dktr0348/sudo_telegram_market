@@ -264,10 +264,12 @@ class Database:
         """Получение товара по ID"""
         try:
             async with self.async_session() as session:
-                stmt = select(Product).where(Product.product_id == product_id)
+                # Добавляем joinedload для reviews
+                stmt = select(Product).options(
+                    joinedload(Product.reviews)
+                ).where(Product.product_id == product_id)
                 result = await session.execute(stmt)
-                product = result.scalar_one_or_none()
-                return product
+                return result.unique().scalar_one_or_none()
         except Exception as e:
             logging.error(f"Ошибка при получении товара: {e}")
             return None
