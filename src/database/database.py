@@ -176,41 +176,28 @@ class Database:
         """Добавление товара в корзину"""
         try:
             async with self.async_session() as session:
-                # Получаем товар для проверки доступного количества
-                product = await session.get(Product, product_id)
-                if not product:
-                    logging.error(f"Товар {product_id} не найден")
-                    return False
-                
-                # Проверяем, есть ли уже этот товар в корзине
+                # Проверяем, есть ли уже товар в корзине
                 stmt = select(Cart).where(
                     Cart.user_id == user_id,
                     Cart.product_id == product_id
                 )
                 result = await session.execute(stmt)
-                existing_cart_item = result.scalar_one_or_none()
+                cart_item = result.scalar_one_or_none()
                 
-                if existing_cart_item:
-                    # Обновляем количество существующего товара
-                    existing_cart_item.quantity = quantity
-                    existing_cart_item.product = product
-                    existing_cart_item.check_available_quantity()
+                if cart_item:
+                    # Если товар уже есть, обновляем количество
+                    cart_item.quantity = quantity
                 else:
-                    # Создаем новый элемент корзины
+                    # Если товара нет, создаем новую запись
                     cart_item = Cart(
                         user_id=user_id,
                         product_id=product_id,
                         quantity=quantity
                     )
-                    cart_item.product = product
-                    cart_item.check_available_quantity()
                     session.add(cart_item)
                 
                 await session.commit()
                 return True
-        except ValueError as e:
-            logging.error(f"Ошибка валидации: {e}")
-            return False
         except Exception as e:
             logging.error(f"Ошибка при добавлении в корзину: {e}")
             return False
@@ -246,18 +233,18 @@ class Database:
         await self.engine.dispose()
 
     async def get_cart_item_quantity(self, user_id: int, product_id: int) -> int:
-        """Получение количества товара в корзине пользователя"""
+        """Получение количества товара в корзине"""
         try:
             async with self.async_session() as session:
-                stmt = select(Cart.quantity).where(
+                stmt = select(Cart).where(
                     Cart.user_id == user_id,
                     Cart.product_id == product_id
                 )
                 result = await session.execute(stmt)
-                quantity = result.scalar_one_or_none()
-                return quantity or 0
+                cart_item = result.scalar_one_or_none()
+                return cart_item.quantity if cart_item else 0
         except Exception as e:
-            logging.error(f"Ошибка при получении количества товара в корзине: {e}")
+            logging.error(f"Ошибка при получении количества товара: {e}")
             return 0
 
     async def get_product_by_id(self, product_id: int) -> Optional[Product]:
@@ -475,7 +462,7 @@ class Database:
         try:
             async with self.async_session() as session:
                 stmt = select(Favorite).options(
-                    joinedload(Favorite.product)
+                    joinedload(Favorite.product).joinedload(Product.reviews)
                 ).where(Favorite.user_id == user_id)
                 result = await session.execute(stmt)
                 return result.unique().scalars().all()
@@ -496,3 +483,18 @@ class Database:
         except Exception as e:
             logging.error(f"Ошибка при проверке избранного: {e}")
             return False
+
+    async def get_product_reviews(self, product_id: int) -> List[Review]:
+        """Получение всех отзывов о товаре"""
+        try:
+            async with self.async_session() as session:
+                stmt = select(Review).options(
+                    joinedload(Review.user)
+                ).where(
+                    Review.product_id == product_id
+                ).order_by(Review.created_at.desc())
+                result = await session.execute(stmt)
+                return result.unique().scalars().all()
+        except Exception as e:
+            logging.error(f"Ошибка при получении отзывов: {e}")
+            return []

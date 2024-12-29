@@ -88,6 +88,7 @@ class Product(Base):
 
     @property
     def average_rating(self):
+        """Вычисление среднего рейтинга товара"""
         if not self.reviews:
             return 0
         return sum(review.rating for review in self.reviews) / len(self.reviews)
@@ -192,6 +193,7 @@ class Review(Base):
     user = relationship('User', back_populates='reviews')
     product = relationship('Product', back_populates='reviews')
     
+    # Ограничения на рейтинг (от 1 до 5)
     __table_args__ = (
         CheckConstraint(rating >= 1, name='check_rating_min'),
         CheckConstraint(rating <= 5, name='check_rating_max'),

@@ -575,7 +575,7 @@ def delivery_method_keyboard() -> InlineKeyboardMarkup:
     ])
 
 def payment_method_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура выбора способа опла��ы"""
+    """Клавиатура выбора способа оплаты"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="💵 Наличными", callback_data="payment_cash"),
@@ -609,6 +609,7 @@ main_inline = InlineKeyboardMarkup(inline_keyboard=[
 
 # Клавиатура для товара с кнопкой избранного
 def product_keyboard(product_id: int, is_favorite: bool = False):
+    """Клавиатура для товара"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -622,14 +623,18 @@ def product_keyboard(product_id: int, is_favorite: bool = False):
         ],
         [
             InlineKeyboardButton(
-                text="⭐ Оставить отзыв",
+                text="📝 Отзывы",
+                callback_data=f"show_reviews_{product_id}"
+            ),
+            InlineKeyboardButton(
+                text="✍️ Написать отзыв",
                 callback_data=f"review_{product_id}"
             )
         ],
         [
             InlineKeyboardButton(
-                text="◀️ Назад",
-                callback_data="back_to_catalog"
+                text="◀️ Назад к категориям",
+                callback_data="back_to_categories"
             )
         ]
     ])
@@ -663,3 +668,18 @@ review_keyboard = InlineKeyboardMarkup(inline_keyboard=[
         InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_review")
     ]
 ])
+
+# Клавиатура для подтверждения
+confirm_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Подтвердить")],
+        [KeyboardButton(text="Отменить редактирование")]
+    ],
+    resize_keyboard=True
+)
+
+# Клавиатура для отмены
+cancel_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="Отменить редактирование")]],
+    resize_keyboard=True
+)
