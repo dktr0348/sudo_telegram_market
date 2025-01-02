@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 from .models import Base, User, UserProfile, Product, Cart, Order, OrderItem
 from .models import DeliveryMethod, PaymentMethod, OrderStatus
 from .models import Favorite, Review
+from .models import StarsTransaction, TransactionStatus
 
 class Database:
     def __init__(self, database_url: str):

@@ -2,14 +2,23 @@ from aiogram import F
 from aiogram import Router
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command, CommandStart, BaseFilter
-from src.config import admin_ids, super_admin_id
+from src.config import admin_ids, super_admin_id, Config
+from src.database.database import Database
 import src.state as st
 import src.keyboards as kb
 import src.database.requests as db
 from aiogram.fsm.context import FSMContext
 import logging
+from ..database.models import StarsTransaction  # Добавляем импорт модели
 
 router = Router()
+
+async def check_admin(message: Message) -> bool:
+    """Проверка является ли пользователь администратором"""
+    if message.from_user.id not in Config.admin_ids:
+        await message.answer("⛔️ У вас нет прав администратора")
+        return False
+    return True
 
 class SuperAdminFilter(BaseFilter):
     """Фильтр для проверки прав супер-администратора"""
@@ -246,7 +255,7 @@ async def edit_product_select(callback: CallbackQuery, state: FSMContext):
     category_id = int(callback.data.split('_')[2])
     await state.update_data(category_id=category_id)
     
-    keyboard = await kb.admin_products_by_category_kb(category_id)
+    keyboard = await kb.admin_products_by_category(category_id)
     if keyboard:
         await callback.message.edit_text(
             "📦 Выберите товар для редактирования:",
@@ -256,13 +265,13 @@ async def edit_product_select(callback: CallbackQuery, state: FSMContext):
     else:
         await callback.message.edit_text(
             "❌ В этой категории нет товаров",
-            reply_markup=kb.admin_main
+            reply_markup=await kb.admin_categories_kb()
         )
         await state.clear()
 
-@router.callback_query(admin_filter, F.data.startswith("admin_product_"), st.EditProduct.select_product)
-async def edit_product_fields(callback: CallbackQuery, state: FSMContext):
-    """Выбор поля для редактирования товара"""
+@router.callback_query(admin_filter, F.data.startswith("edit_product_"), st.EditProduct.select_product)
+async def edit_product_select_field(callback: CallbackQuery, state: FSMContext):
+    """Выбор поля для редактирования"""
     product_id = int(callback.data.split('_')[2])
     await state.update_data(product_id=product_id)
     
@@ -270,9 +279,10 @@ async def edit_product_fields(callback: CallbackQuery, state: FSMContext):
     if product:
         text = (
             f"📦 Товар: {product.name}\n"
-                    f"📝 Описание: {product.description}\n"
             f"💰 Цена: {product.price}₽\n"
             f"🔢 Количество: {product.quantity}\n"
+            f"📝 Описание: {product.description}\n\n"
+            "Выберите, что хотите отредактировать:"
         )
         
         if product.photo_id:
@@ -293,6 +303,7 @@ async def edit_product_fields(callback: CallbackQuery, state: FSMContext):
             "❌ Товар не найден",
             reply_markup=kb.admin_main
         )
+        await state.clear()
 
 async def show_edit_menu(message: Message, state: FSMContext, success_message: str = ""):
     """Показать меню редактирования после изменения"""
@@ -318,7 +329,7 @@ async def show_edit_menu(message: Message, state: FSMContext, success_message: s
         else:
             await message.answer(
                 text,
-                reply_markup=kb.edit_product
+            reply_markup=kb.edit_product
         )
         await state.set_state(st.EditProduct.select_field)
     else:
@@ -418,22 +429,24 @@ async def delete_product_start(message: Message, state: FSMContext):
 async def delete_product_select_category(callback: CallbackQuery, state: FSMContext):
     """Выбор категории для удаления товара"""
     category_id = int(callback.data.split('_')[2])
+    await state.update_data(category_id=category_id)
+    
     keyboard = await kb.admin_products_by_category_kb(category_id)
     if keyboard:
         await callback.message.edit_text(
             "📦 Выберите товар для удаления:",
             reply_markup=keyboard
         )
-        await state.set_state(st.DeleteProduct.select)
+        await state.set_state(st.DeleteProduct.select_product)
     else:
         await callback.message.edit_text(
             "❌ В этой категории нет товаров",
-            reply_markup=kb.admin_main
+            reply_markup=await kb.admin_categories_kb()
         )
         await state.clear()
 
-@router.callback_query(admin_filter, F.data.startswith("admin_product_"), st.DeleteProduct.select)
-async def confirm_delete_product(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(admin_filter, F.data.startswith("admin_product_"), st.DeleteProduct.select_product)
+async def delete_product_confirm(callback: CallbackQuery, state: FSMContext):
     """Подтверждение удаления товара"""
     product_id = int(callback.data.split('_')[2])
     await state.update_data(product_id=product_id)
@@ -442,64 +455,60 @@ async def confirm_delete_product(callback: CallbackQuery, state: FSMContext):
     if product:
         text = (
             f"❗️ Вы действительно хотите удалить товар?\n\n"
-            f"📦 Название: {product.name}\n"
-            f"💰 Цена: {product.price}₽"
+            f"📦 {product.name}\n"
+            f"💰 {product.price}₽\n"
+            f"📝 {product.description}"
         )
-        # Используем правильные callback_data
-        confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Да", callback_data="ok-sure"),
-                InlineKeyboardButton(text="❌ Нет", callback_data="cancel-sure")
-            ]
-        ])
-        await callback.message.edit_text(text, reply_markup=confirm_kb)
+        
+        if product.photo_id:
+            await callback.message.delete()
+            await callback.message.answer_photo(
+                photo=product.photo_id,
+                caption=text,
+                reply_markup=kb.confirm
+            )
+        else:
+            await callback.message.edit_text(
+                text,
+                reply_markup=kb.confirm
+            )
         await state.set_state(st.DeleteProduct.confirm)
     else:
         await callback.message.edit_text(
             "❌ Товар не найден",
             reply_markup=kb.admin_main
         )
-    await state.clear()
+        await state.clear()
 
 @router.callback_query(admin_filter, F.data == "ok-sure", st.DeleteProduct.confirm)
-async def delete_product_finish(callback: CallbackQuery, state: FSMContext):
-    """Завершение удаления товара"""
+async def delete_product_final(callback: CallbackQuery, state: FSMContext):
+    """Окончательное удаление товара"""
     data = await state.get_data()
-    try:
-        if await db.delete_product(data['product_id']):
-            # Создаем инлайн клавиатуру для возврата в админ меню
-            back_kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="◀️ В админ меню", callback_data="back_to_admin_menu")]
-            ])
-            await callback.message.edit_text(
-                "✅ Товар успешно удалён",
-                reply_markup=back_kb
-            )
-            # Отправляем дополнительное сообщение с подтверждением
-            await callback.answer("✅ Товар успешно удалён!", show_alert=True)
-        else:
-            await callback.message.edit_text(
-                "❌ Ошибка при удалении товара",
-                reply_markup=back_kb
-            )
-    except Exception as e:
-        logging.error(f"Ошибка при удалении товара: {e}")
-        await callback.message.edit_text(
-            "❌ Произошла ошибка при удалении товара",
-            reply_markup=back_kb
+    product_id = data.get('product_id')
+    
+    if await db.delete_product(product_id):
+        # Отправляем новое сообщение вместо редактирования
+        await callback.message.delete()  # Удаляем старое сообщение
+        await callback.message.answer(
+            "✅ Товар успешно удален",
+            reply_markup=kb.admin_main
         )
-    finally:
-        await state.clear()
+    else:
+        await callback.message.delete()
+        await callback.message.answer(
+            "❌ Ошибка при удалении товара",
+            reply_markup=kb.admin_main
+        )
+    await state.clear()
 
 @router.callback_query(admin_filter, F.data == "cancel-sure", st.DeleteProduct.confirm)
 async def cancel_delete_product(callback: CallbackQuery, state: FSMContext):
     """Отмена удаления товара"""
-    back_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="◀️ В админ меню", callback_data="back_to_admin_menu")]
-    ])
-    await callback.message.edit_text(
+    # Отправляем новое сообщение вместо редактирования
+    await callback.message.delete()
+    await callback.message.answer(
         "❌ Удаление товара отменено",
-        reply_markup=back_kb
+        reply_markup=kb.admin_main
     )
     # Отправляем дополнительное сообщение с подтверждением
     await callback.answer("❌ Удаление отменено!", show_alert=True)
@@ -778,13 +787,13 @@ async def add_product_cancel(callback: CallbackQuery, state: FSMContext):
         reply_markup=kb.admin_main
     )
 
-@router.message(admin_filter, F.text == "➕ Добавить товар")
+@router.message(F.text == '➕ Добавить товар')
 async def add_product_start(message: Message, state: FSMContext):
-    """Начало процесса добавления товара"""
+    """Начало добавления товара"""
     await state.set_state(st.AddProduct.category)
     keyboard = await kb.admin_categories_kb()
     await message.answer(
-        "Выберите категорию для нового товара:",
+        "📋 Выберите категорию для нового товара:",
         reply_markup=keyboard
     )
 
@@ -930,4 +939,40 @@ async def back_to_category_products(callback: CallbackQuery, state: FSMContext):
             reply_markup=kb.admin_main
         )
         await state.clear()
+
+@router.message(Command("stars_history"))
+async def show_stars_history(message: Message):
+    """Показать историю транзакций Stars"""
+    try:
+        # Проверяем права через существующую систему и super_admin
+        admins = await db.get_admins()
+        if message.from_user.id not in [admin.user_id for admin in admins] and message.from_user.id != super_admin_id:
+            await message.answer("⛔️ У вас нет прав администратора")
+            return
+            
+        # Получаем историю транзакций
+        transactions = await db.get_stars_transactions(limit=20)
+        
+        if not transactions:
+            await message.answer("История транзакций Stars пуста")
+            return
+            
+        # Формируем текст отчета
+        report = "📊 История транзакций Stars:\n\n"
+        for tx in transactions:
+            status_emoji = "✅" if tx.status == "completed" else "❌"
+            report += (
+                f"{status_emoji} Заказ #{tx.order_id}\n"
+                f"👤 User ID: {tx.user_id}\n"
+                f"⭐ Stars: {tx.stars_amount}\n"
+                f"💰 Сумма: {tx.amount_rub}₽\n"
+                f"📅 Дата: {tx.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+                f"📝 Статус: {tx.status}\n\n"
+            )
+            
+        await message.answer(report)
+        
+    except Exception as e:
+        logging.error(f"Ошибка при показе истории Stars: {e}")
+        await message.answer("❌ Ошибка при получении истории транзакций")
 

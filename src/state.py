@@ -37,7 +37,7 @@ class AddProduct(StatesGroup):
    
 class DeleteProduct(StatesGroup):
     select_category = State()
-    select = State()
+    select_product = State()
     confirm = State()
 
 class AddAdmin(StatesGroup):
@@ -59,3 +59,10 @@ class EditProduct(StatesGroup):
     edit_category = State()
     edit_quantity = State()
     confirm = State()
+
+class OrderState(StatesGroup):
+    """Состояния оформления заказа"""
+    delivery_method = State()  # Выбор способа доставки
+    address = State()         # Ввод адреса
+    payment_method = State()  # Выбор способа оплаты
+    confirmation = State()    # Подтверждение заказа

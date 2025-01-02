@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import logging
 import re
 import os
+from decimal import Decimal
 
 @dataclass
 class Config:
@@ -12,6 +13,11 @@ class Config:
     database_path: str
     db_url: str
     super_admin_id: int
+    
+    # Stars конфигурация
+    STARS_RATE: Decimal = Decimal('1.35')  # Курс конвертации: 1 Star = 1.35 рубля
+    MIN_STARS_AMOUNT: int = 1  # Минимальная сумма для оплаты Stars
+
 
 def load_config() -> Config:
     load_dotenv()
@@ -56,13 +62,15 @@ def load_config() -> Config:
     if super_admin_id not in admin_ids:
         admin_ids.append(super_admin_id)
     
-    return Config(
+    config = Config(
         token=token,
         admin_ids=admin_ids,
         database_path=database_path,
         db_url=db_url,
         super_admin_id=super_admin_id
     )
+    
+    return config
 
 # Загружаем конфигурацию
 try:
@@ -73,3 +81,6 @@ try:
 except Exception as e:
     logging.error(f"Failed to load configuration: {e}")
     raise
+
+# Добавьте ID канала для Stars
+STARS_CHANNEL_ID = None  # Замените на ID вашего канала

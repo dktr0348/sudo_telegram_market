@@ -1,8 +1,10 @@
-from .models import async_session
-from .models import User, UserProfile, Category, Product, Cart
-from sqlalchemy import select, insert, update, delete
+from .models import async_session, User, UserProfile, Category, Product, Cart
+from .models import Order, OrderItem, StarsTransaction, OrderStatus, PaymentMethod, Review
+from sqlalchemy import select, insert, update, delete, or_
 import functools
 import logging
+from typing import List, Optional
+from datetime import datetime
 
 def connection(func):
     """Декоратор для автоматического управления сессией базы данных"""
@@ -173,69 +175,206 @@ async def is_admin(session, user_id: int) -> bool:
         return False
 
 @connection
-async def get_cart_item_quantity(user_id: int, product_id: int) -> int:
+async def get_cart_item_quantity(session, user_id: int, product_id: int) -> int:
     """Получение количества товара в корзине пользователя"""
-    async with async_session() as session:
-        result = await session.execute(
-            select(Cart.quantity)
+    result = await session.execute(
+        select(Cart.quantity)
+        .where(Cart.user_id == user_id)
+        .where(Cart.product_id == product_id)
+    )
+    quantity = result.scalar()
+    return quantity or 0
+
+@connection
+async def add_to_cart(session, user_id: int, product_id: int, quantity: int) -> bool:
+    """Добавление/обновление товара в корзине"""
+    try:
+        cart_item = await session.scalar(
+            select(Cart)
             .where(Cart.user_id == user_id)
             .where(Cart.product_id == product_id)
         )
-        quantity = result.scalar()
-        return quantity or 0
-
-@connection
-async def add_to_cart(user_id: int, product_id: int, quantity: int) -> bool:
-    """Добавление товара в корзину"""
-    try:
-        async with async_session() as session:
-            # Проверяем, есть ли уже товар в корзине
-            result = await session.execute(
-                select(Cart)
-                .where(Cart.user_id == user_id)
-                .where(Cart.product_id == product_id)
+        
+        if cart_item:
+            cart_item.quantity = quantity
+        else:
+            cart_item = Cart(
+                user_id=user_id,
+                product_id=product_id,
+                quantity=quantity
             )
-            cart_item = result.scalar()
+            session.add(cart_item)
             
-            if cart_item:
-                # Обновляем количество
-                cart_item.quantity = quantity
-            else:
-                # Создаем новую запись
-                cart_item = Cart(
-                    user_id=user_id,
-                    product_id=product_id,
-                    quantity=quantity
-                )
-                session.add(cart_item)
-            
-            await session.commit()
-            return True
+        await session.commit()
+        return True
     except Exception as e:
         logging.error(f"Ошибка при добавлении в корзину: {e}")
         return False
 
 @connection
-async def clear_cart(user_id: int) -> bool:
+async def clear_cart(session, user_id: int) -> bool:
     """Очистка корзины пользователя"""
     try:
-        async with async_session() as session:
-            await session.execute(
-                delete(Cart).where(Cart.user_id == user_id)
-            )
-            await session.commit()
-            return True
+        await session.execute(
+            delete(Cart).where(Cart.user_id == user_id)
+        )
+        await session.commit()
+        return True
     except Exception as e:
         logging.error(f"Ошибка при очистке корзины: {e}")
         return False
 
 @connection
-async def get_cart(user_id: int) -> list:
+async def get_cart(session, user_id: int) -> list:
     """Получение содержимого корзины пользователя"""
-    async with async_session() as session:
-        result = await session.execute(
-            select(Product.name, Product.price, Cart.quantity)
-            .join(Cart, Cart.product_id == Product.product_id)
-            .where(Cart.user_id == user_id)
+    result = await session.execute(
+        select(Product, Cart.quantity)
+        .join(Cart, Cart.product_id == Product.product_id)
+        .where(Cart.user_id == user_id)
+    )
+    return result.all()
+
+@connection
+async def remove_from_cart(session, user_id: int, product_id: int) -> bool:
+    """Удаление товара из корзины"""
+    try:
+        await session.execute(
+            delete(Cart).where(
+                Cart.user_id == user_id,
+                Cart.product_id == product_id
+            )
         )
-        return result.all()
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при удалении из корзины: {e}")
+        return False
+
+@connection
+async def get_stars_transactions(session, user_id: int = None, limit: int = 10) -> List[StarsTransaction]:
+    """Получение истории транзакций Stars"""
+    try:
+        if user_id:
+            stmt = select(StarsTransaction).where(
+                StarsTransaction.user_id == user_id
+            ).order_by(
+                StarsTransaction.created_at.desc()
+            ).limit(limit)
+        else:
+            stmt = select(StarsTransaction).order_by(
+                StarsTransaction.created_at.desc()
+            ).limit(limit)
+            
+        result = await session.execute(stmt)
+        return result.scalars().all()
+    except Exception as e:
+        logging.error(f"Ошибка при получении истории Stars: {e}")
+        return []
+
+@connection
+async def add_stars_transaction(
+    session,
+    order_id: int,
+    user_id: int,
+    stars_amount: int,
+    amount_rub: float,
+    status: str = "completed"
+) -> bool:
+    """Добавление новой транзакции Stars"""
+    try:
+        transaction = StarsTransaction(
+            order_id=order_id,
+            user_id=user_id,
+            stars_amount=stars_amount,
+            amount_rub=amount_rub,
+            status=status
+        )
+        session.add(transaction)
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении транзакции Stars: {e}")
+        await session.rollback()
+        return False
+
+@connection
+async def create_order(session, user_id: int, total_amount: float, payment_method: str, status: str = "pending") -> int:
+    """Создание нового заказа"""
+    order = Order(
+        user_id=user_id,
+        total_amount=total_amount,
+        payment_method=payment_method,
+        status=status
+    )
+    session.add(order)
+    await session.commit()
+    return order.order_id
+
+@connection
+async def get_user_orders(session, user_id: int):
+    """Получение заказов пользователя"""
+    try:
+        result = await session.execute(
+            select(Order)
+            .where(Order.user_id == user_id)
+            .order_by(Order.created_at.desc())
+        )
+        return result.scalars().all()
+    except Exception as e:
+        logging.error(f"Ошибка при получении заказов: {e}")
+        return []
+
+@connection
+async def update_product_quantity(session, product_id: int, quantity: int):
+    """Обновление количества товара"""
+    await session.execute(
+        update(Product)
+        .where(Product.product_id == product_id)
+        .values(quantity=quantity)
+    )
+    await session.commit()
+
+@connection
+async def add_order_item(session, order_id: int, product_id: int, quantity: int, price: float):
+    """Добавление товара в заказ"""
+    order_item = OrderItem(
+        order_id=order_id,
+        product_id=product_id,
+        quantity=quantity,
+        price=price
+    )
+    session.add(order_item)
+    await session.commit()
+
+@connection
+async def get_product_reviews(session, product_id: int):
+    """Получение отзывов о товаре"""
+    try:
+        result = await session.execute(
+            select(Review)
+            .join(User)  # Присоединяем таблицу пользователей
+            .where(Review.product_id == product_id)
+            .order_by(Review.created_at.desc())
+        )
+        return result.scalars().all()
+    except Exception as e:
+        logging.error(f"Ошибка при получении отзывов: {e}")
+        return []
+
+@connection
+async def add_review(session, user_id: int, product_id: int, rating: int, text: str) -> bool:
+    """Добавление нового отзыва"""
+    try:
+        review = Review(
+            user_id=user_id,
+            product_id=product_id,
+            rating=rating,
+            text=text
+        )
+        session.add(review)
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при добавлении отзыва: {e}")
+        await session.rollback()
+        return False

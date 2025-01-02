@@ -2,6 +2,7 @@ from aiogram.types import (ReplyKeyboardMarkup, KeyboardButton,
                           InlineKeyboardMarkup, InlineKeyboardButton)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import src.database.requests as db
+from src.database.models import OrderStatus, PaymentMethod, Order
 import logging
 # Главное меню с поиском и избранным
 main = ReplyKeyboardMarkup(keyboard=[
@@ -112,28 +113,22 @@ profile_keyboard = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 # Клавиатура для выбора категории
-async def categories():
+async def categories() -> InlineKeyboardMarkup:
+    """Клавиатура для выбора категории (обычная версия)"""
     try:
         all_categories = await db.get_categories()
-        categories_list = [cat for cat in all_categories]
-        
         keyboard = InlineKeyboardBuilder()
         
-        if not categories_list:
+        for category in all_categories:
             keyboard.add(InlineKeyboardButton(
-                text="🏠 В главное меню",
-                callback_data="back"
+                text=category.name,
+                callback_data=f'category_{category.id}'
             ))
-        else:
-            for category in categories_list:
-                keyboard.add(InlineKeyboardButton(
-                    text=category.name,
-                    callback_data=f'category_{category.id}'
-                ))
-            keyboard.add(InlineKeyboardButton(
-                text="🏠 В главное меню",
-                callback_data="back"
-            ))
+            
+        keyboard.add(InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data="back"
+        ))
         
         return keyboard.adjust(2).as_markup()
     except Exception as e:
@@ -169,10 +164,13 @@ async def category_products(category_id: int):
         logging.error(f"Ошибка при создании клавиатуры продуктов: {e}")
         return None
 
-confirm = InlineKeyboardMarkup (inline_keyboard=[
-    [InlineKeyboardButton(text='✅ Да', callback_data='ok-sure')], 
-    [InlineKeyboardButton(text='❌ Нет', callback_data='cancel-sure')]],
-    resize_keyboard=True)
+# Клавиатура подтверждения
+confirm = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="✅ Да", callback_data="ok-sure"),
+        InlineKeyboardButton(text="❌ Нет", callback_data="cancel-sure")
+    ]
+])
 
 admin_main = ReplyKeyboardMarkup(keyboard=[
     [
@@ -467,62 +465,56 @@ skip_location = ReplyKeyboardMarkup(keyboard=[
     [KeyboardButton(text='❌ Отмена регистрации')]
 ], resize_keyboard=True)
 
-async def admin_categories_kb():
+async def admin_categories_kb() -> InlineKeyboardMarkup:
     """Клавиатура для выбора категории (админская версия)"""
     try:
         all_categories = await db.get_categories()
-        categories_list = [cat for cat in all_categories]
-        
         keyboard = InlineKeyboardBuilder()
         
-        if not categories_list:
+        for category in all_categories:
             keyboard.add(InlineKeyboardButton(
-                text="Нет доступных категорий",
-                callback_data="no_categories"
+                text=category.name,
+                callback_data=f'admin_category_{category.id}'
             ))
-        else:
-            for category in categories_list:
-                keyboard.add(InlineKeyboardButton(
-                    text=category.name,
-                    callback_data=f'admin_category_{category.id}'
-                ))
-                
-        keyboard.add(InlineKeyboardButton(
-            text="◀️ Назад",
+            
+        keyboard.row(InlineKeyboardButton(
+            text="🏠 В админ меню",
             callback_data="back_to_admin_menu"
         ))
         
         return keyboard.adjust(2).as_markup()
     except Exception as e:
-        logging.error(f"Ошибка при создании админской клавиатуры категорий: {e}")
+        logging.error(f"Ошибка при создании клавиатуры категорий: {e}")
         return None
 
-async def admin_products_by_category_kb(category_id: int):
+async def admin_products_by_category_kb(category_id: int) -> InlineKeyboardMarkup:
     """Клавиатура для выбора товара из категории (админская версия)"""
     try:
         products = await db.get_products_by_category(category_id)
         keyboard = InlineKeyboardBuilder()
         
-        if not products:
-            keyboard.add(InlineKeyboardButton(
-                text="В этой категории нет товаров",
-                callback_data="no_products"
-            ))
-        else:
+        if products:
             for product in products:
                 keyboard.add(InlineKeyboardButton(
                     text=f"{product.name} - {product.price}₽",
                     callback_data=f'admin_product_{product.product_id}'
                 ))
-                
-        keyboard.add(InlineKeyboardButton(
-            text="◀️ Назад к категориям",
-            callback_data="back_to_admin_categories"
-        ))
+        
+        # Добавляем кнопки навигации
+        keyboard.row(
+            InlineKeyboardButton(
+                text="◀️ К категориям",
+                callback_data="back_to_admin_categories"
+            ),
+            InlineKeyboardButton(
+                text="🏠 В админ меню",
+                callback_data="back_to_admin_menu"
+            )
+        )
         
         return keyboard.adjust(1).as_markup()
     except Exception as e:
-        logging.error(f"Ошибка при создании админской клавиатуры товаров: {e}")
+        logging.error(f"Ошибка при создании клавиатуры товаров: {e}")
         return None
 
 cancel_button = KeyboardButton(text="❌ Отменить")
@@ -539,12 +531,12 @@ skip_photo_kb = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-def cart_item_keyboard(product_id: int, current_quantity: int = 1) -> InlineKeyboardMarkup:
+def cart_item_keyboard(product_id: int, current_quantity: int = 1):
     """Клавиатура для товара в корзине"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="➖", callback_data=f"cart_decrease_{product_id}"),
-            InlineKeyboardButton(text=f"{current_quantity} шт.", callback_data=f"cart_quantity_{product_id}"),
+            InlineKeyboardButton(text=f"{current_quantity} шт.", callback_data=f"cart_qty_{product_id}"),
             InlineKeyboardButton(text="➕", callback_data=f"cart_increase_{product_id}")
         ],
         [
@@ -553,7 +545,7 @@ def cart_item_keyboard(product_id: int, current_quantity: int = 1) -> InlineKeyb
     ])
 
 def cart_summary_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для корзины"""
+    """Клавиатура для итогов корзины"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="💳 Оформить заказ", callback_data="checkout"),
@@ -578,21 +570,39 @@ def payment_method_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура выбора способа оплаты"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="💵 Наличными", callback_data="payment_cash"),
-            InlineKeyboardButton(text="💳 Картой", callback_data="payment_card")
-        ],
-        [
-            InlineKeyboardButton(text="🌐 Онлайн", callback_data="payment_online")
+            InlineKeyboardButton(text="💵 Перевод на карту", callback_data="payment_card"),
+            InlineKeyboardButton(text="⭐ Telegram Stars", callback_data="payment_stars")
         ],
         [InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_checkout")]
     ])
 
-def confirm_order_keyboard() -> InlineKeyboardMarkup:
+def payment_confirm_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура подтверждения оплаты P2P"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data="confirm_payment"),
+            InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_payment")
+        ]
+    ])
+
+def order_confirmation_keyboard() -> InlineKeyboardMarkup:
     """Клавиатура подтверждения заказа"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Подтвердить", callback_data="confirm_order"),
-            InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_checkout")
+            InlineKeyboardButton(text="✅ Подтвердить заказ", callback_data="confirm_order"),
+            InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_order")
+        ]
+    ])
+
+def order_status_keyboard(order_id: int) -> InlineKeyboardMarkup:
+    """Клавиатура для просмотра статуса заказа"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📋 Детали заказа", callback_data=f"order_details_{order_id}"),
+            InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"cancel_order_{order_id}")
+        ],
+        [
+            InlineKeyboardButton(text="🏠 В главное меню", callback_data="back_to_main")
         ]
     ])
 
@@ -604,6 +614,9 @@ main_inline = InlineKeyboardMarkup(inline_keyboard=[
     [
         InlineKeyboardButton(text="👤 Профиль", callback_data="show_profile"),
         InlineKeyboardButton(text="📋 Мои заказы", callback_data="show_orders")
+    ],
+    [
+        InlineKeyboardButton(text="🏠 В главное меню", callback_data="back_to_main")
     ]
 ])
 
@@ -612,13 +625,18 @@ def product_keyboard(product_id: int, is_favorite: bool = False):
     """Клавиатура для товара"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
+            InlineKeyboardButton(text="➖", callback_data=f"qty_minus_{product_id}"),
+            InlineKeyboardButton(text="0", callback_data="current_qty"),
+            InlineKeyboardButton(text="➕", callback_data=f"qty_plus_{product_id}")
+        ],
+        [
             InlineKeyboardButton(
                 text="❤️" if is_favorite else "🤍",
                 callback_data=f"toggle_favorite_{product_id}"
             ),
             InlineKeyboardButton(
                 text="🛒 В корзину",
-                callback_data=f"add_to_cart_{product_id}"
+                callback_data=f"cart_add_{product_id}"
             )
         ],
         [
@@ -683,3 +701,23 @@ cancel_keyboard = ReplyKeyboardMarkup(
     keyboard=[[KeyboardButton(text="Отменить редактирование")]],
     resize_keyboard=True
 )
+
+def get_order_status_emoji(status: str) -> str:
+    """Получение эмодзи для статуса заказа"""
+    status_emojis = {
+        "pending": "⏳",
+        "completed": "✅",
+        "cancelled": "❌",
+        "processing": "🔄"
+    }
+    return status_emojis.get(status, "❓")
+
+def format_order_info(order: Order) -> str:
+    """Форматирование информации о заказе"""
+    status_emoji = get_order_status_emoji(order.status)
+    return (
+        f"🆔 Заказ #{order.order_id}\n"
+        f"💰 Сумма: {order.total_amount}₽\n"
+        f"📅 Дата: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+        f"Статус: {status_emoji} {order.status}"
+    )

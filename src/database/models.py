@@ -1,9 +1,10 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, CheckConstraint, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, CheckConstraint, Enum, text
 from sqlalchemy.orm import relationship, validates, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from dataclasses import dataclass
 
 # Создаем базовый класс для моделей
 Base = declarative_base()
@@ -21,6 +22,23 @@ async_session = sessionmaker(
     expire_on_commit=False
 )
 
+# Определяем Enum классы до их использования
+class OrderStatus(str, enum.Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    PROCESSING = "processing"
+
+class PaymentMethod(str, enum.Enum):
+    CARD = "card"
+    STARS = "stars"
+    TINKOFF = "tinkoff"
+
+class DeliveryMethod(enum.Enum):
+    COURIER = "courier"
+    PICKUP = "pickup"
+
+# Далее идут модели
 class User(Base):
     __tablename__ = 'users'
     
@@ -124,48 +142,45 @@ class Cart(Base):
                 f"запрошено: {self.quantity}"
             )
 
-class OrderStatus(enum.Enum):
-    NEW = "new"
-    PROCESSING = "processing"
-    CONFIRMED = "confirmed"
-    DELIVERING = "delivering"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-class PaymentMethod(enum.Enum):
-    CASH = "cash"
-    CARD = "card"
-    ONLINE = "online"
-
-class DeliveryMethod(enum.Enum):
-    COURIER = "courier"
-    PICKUP = "pickup"
-
 class Order(Base):
     __tablename__ = 'orders'
-
+    
     order_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.user_id'))
-    status = Column(Enum(OrderStatus), default=OrderStatus.NEW)
     total_amount = Column(Float, nullable=False)
-    delivery_address = Column(String)
-    payment_method = Column(Enum(PaymentMethod))
-    delivery_method = Column(Enum(DeliveryMethod))
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    payment_method = Column(String, nullable=False)
+    status = Column(String, nullable=False, default=OrderStatus.PENDING)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship('User', back_populates='orders')
+    items = relationship('OrderItem', back_populates='order')
+    stars_transaction = relationship('StarsTransaction', back_populates='order')
 
-    user = relationship("User", back_populates="orders")
-    items = relationship("OrderItem", back_populates="order")
+    @validates('status')
+    def validate_status(self, key, value):
+        if isinstance(value, OrderStatus):
+            return value
+        if value not in OrderStatus._value2member_map_:
+            raise ValueError(f"Invalid status: {value}")
+        return value
+
+    @validates('payment_method')
+    def validate_payment_method(self, key, value):
+        if isinstance(value, PaymentMethod):
+            return value.value
+        if value not in [method.value for method in PaymentMethod]:
+            raise ValueError(f"Invalid payment method: {value}")
+        return value
 
 class OrderItem(Base):
     __tablename__ = 'order_items'
-
-    item_id = Column(Integer, primary_key=True)
+    
+    id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey('orders.order_id'))
     product_id = Column(Integer, ForeignKey('products.product_id'))
     quantity = Column(Integer, nullable=False)
     price = Column(Float, nullable=False)
-
+    
     order = relationship("Order", back_populates="items")
     product = relationship("Product")
 
@@ -184,17 +199,40 @@ class Review(Base):
     __tablename__ = 'reviews'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.user_id', ondelete='CASCADE'))
-    product_id = Column(Integer, ForeignKey('products.product_id', ondelete='CASCADE'))
+    user_id = Column(Integer, ForeignKey('users.user_id'))
+    product_id = Column(Integer, ForeignKey('products.product_id'))
     rating = Column(Integer, nullable=False)
     text = Column(Text)
-    created_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.utcnow)
     
     user = relationship('User', back_populates='reviews')
     product = relationship('Product', back_populates='reviews')
+
+    @validates('rating')
+    def validate_rating(self, key, value):
+        if not 1 <= value <= 5:
+            raise ValueError("Rating must be between 1 and 5")
+        return value
+
+class TransactionStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+class StarsTransaction(Base):
+    __tablename__ = 'stars_transactions'
     
-    # Ограничения на рейтинг (от 1 до 5)
-    __table_args__ = (
-        CheckConstraint(rating >= 1, name='check_rating_min'),
-        CheckConstraint(rating <= 5, name='check_rating_max'),
-    )
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey('orders.order_id', name='fk_stars_order_id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.user_id', name='fk_stars_user_id'), nullable=False)
+    stars_amount = Column(Integer, nullable=False)
+    amount_rub = Column(Float, nullable=False)
+    status = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=text('CURRENT_TIMESTAMP'), nullable=False)
+    
+    order = relationship('Order', back_populates='stars_transaction')
+    user = relationship('User')
+
+    def __repr__(self):
+        return f"<StarsTransaction(id={self.id}, stars={self.stars_amount}, amount={self.amount_rub})>"
