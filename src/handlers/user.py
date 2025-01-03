@@ -105,9 +105,10 @@ async def show_cart(event: Union[Message, CallbackQuery], db: Database):
 
 @router.message(Command('menu'))
 async def cmd_menu(message: Message):
+    """Показ главного меню вместо списка команд"""
     await message.answer(
-        text='Доступные команды:', 
-        reply_markup=kb.menu_commands
+        text='🏠 Главное меню',
+        reply_markup=kb.main  # Используем основную reply-клавиатуру вместо menu_commands
     )
 
 @router.message(Command('catalog'))
@@ -1036,39 +1037,6 @@ async def show_filters(callback: CallbackQuery):
         reply_markup=keyboard
     )
 
-@router.callback_query(F.data.startswith("sort_"))
-async def sort_products(callback: CallbackQuery, db: Database):
-    """Сортировка товаров"""
-    sort_type = callback.data.split('_')[1]
-    sort_order = callback.data.split('_')[2] if len(callback.data.split('_')) > 2 else 'asc'
-    
-    products = await db.get_products_filtered(sort_by=sort_type, sort_order=sort_order)
-    if not products:
-        await callback.answer("Товары не найдены")
-        return
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
-    for product in products:
-        rating_stars = "⭐" * round(product.average_rating)
-        keyboard.inline_keyboard.append([
-            InlineKeyboardButton(
-                text=f"{product.name} - {product.price}₽ {rating_stars}",
-                callback_data=f"product_{product.product_id}"
-            )
-        ])
-    
-    keyboard.inline_keyboard.append([
-        InlineKeyboardButton(text="🔍 Фильтры", callback_data="filter_products")
-    ])
-    keyboard.inline_keyboard.append([
-        InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_catalog")
-    ])
-    
-    await callback.message.edit_text(
-        "Выберите товар:",
-        reply_markup=keyboard
-    )
-
 @router.callback_query(F.data == "show_favorites")
 async def show_favorites(callback: CallbackQuery, db: Database):
     """Показ избранных товаров"""
@@ -1238,13 +1206,18 @@ async def start_review(callback: CallbackQuery, state: FSMContext):
         await state.set_state(ProductStates.waiting_for_rating)
         await state.update_data(product_id=product_id)
         
-        await callback.message.edit_text(
+        # Отправляем новое сообщение вместо редактирования
+        await callback.message.answer(
             f"Оцените товар {product.name}:",
             reply_markup=kb.review_keyboard
         )
+        # Удаляем предыдущее сообщение если оно с фото
+        if callback.message.photo:
+            await callback.message.delete()
+            
     except Exception as e:
         logging.error(f"Ошибка при начале создания отзыва: {e}")
-        await callback.answer("Произошла ошибка")
+        await callback.answer("❌ Произошла ошибка")
 
 @router.callback_query(ProductStates.waiting_for_rating, F.data.startswith("rate_"))
 async def process_rating(callback: CallbackQuery, state: FSMContext):
@@ -1262,7 +1235,7 @@ async def process_rating(callback: CallbackQuery, state: FSMContext):
         )
     except Exception as e:
         logging.error(f"Ошибка при обработке рейтинга: {e}")
-        await callback.answer("Произошла ошибка")
+        await callback.answer("❌ Произошла ошибка")
 
 @router.message(ProductStates.waiting_for_review)
 async def process_review_text(message: Message, state: FSMContext, db: Database):
@@ -1706,3 +1679,119 @@ async def back_to_main_menu_inline(callback: CallbackQuery):
     except Exception as e:
         logging.error(f"Ошибка при возврате в меню: {e}")
         await callback.answer("Произошла ошибка")
+
+@router.message(Command("help"))
+async def show_help(message: Message):
+    """Показ справки по боту"""
+    help_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🛍️ Как сделать заказ", callback_data="help_order"),
+            InlineKeyboardButton(text="💳 Оплата", callback_data="help_payment")
+        ],
+        [
+            InlineKeyboardButton(text="📝 Отзывы", callback_data="help_reviews"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="help_settings")
+        ],
+        [
+            InlineKeyboardButton(text="👤 Профиль", callback_data="help_profile")
+        ],
+        [
+            InlineKeyboardButton(text="💬 Чат поддержки", url="https://t.me/chanvasya")
+        ]
+    ])
+    
+    await message.answer(
+        "🤖 Добро пожаловать в справочный раздел!\n"
+        "Выберите интересующую вас тему или обратитесь в поддержку:",
+        reply_markup=help_keyboard
+    )
+
+@router.callback_query(F.data == "help_back")
+async def help_back_to_main(callback: CallbackQuery):
+    """Возврат к главному меню помощи"""
+    help_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🛍️ Как сделать заказ", callback_data="help_order"),
+            InlineKeyboardButton(text="💳 Оплата", callback_data="help_payment")
+        ],
+        [
+            InlineKeyboardButton(text="📝 Отзывы", callback_data="help_reviews"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="help_settings")
+        ],
+        [
+            InlineKeyboardButton(text="👤 Профиль", callback_data="help_profile")
+        ],
+        [
+            InlineKeyboardButton(text="💬 Чат поддержки", url="https://t.me/chanvasya")
+        ]
+    ])
+    
+    await callback.message.edit_text(
+        "🤖 Добро пожаловать в справочный раздел!\n"
+        "Выберите интересующую вас тему или обратитесь в поддержку:",
+        reply_markup=help_keyboard
+    )
+
+@router.callback_query(F.data.startswith("help_"))
+async def process_help_section(callback: CallbackQuery):
+    """Обработка выбора раздела помощи"""
+    if callback.data == "help_back":
+        await help_back_to_main(callback)
+        return
+        
+    section = callback.data.split("_")[1]
+    
+    help_texts = {
+        "order": (
+            "🛍️ Как сделать заказ:\n\n"
+            "1. Выберите товары в каталоге\n"
+            "2. Добавьте их в корзину\n"
+            "3. Перейдите в корзину\n"
+            "4. Нажмите «Оформить заказ»\n"
+            "5. Укажите адрес доставки\n"
+            "6. Выберите способ оплаты\n\n"
+            "После оформления заказа вы получите уведомление о его статусе"
+        ),
+        "payment": (
+            "💳 Способы оплаты:\n\n"
+            "• Банковской картой\n"
+            "• Stars (бонусная система)\n\n"
+            "При оплате Stars используется курс: 1 Star = 1,35₽"
+        ),
+        "reviews": (
+            "📝 Система отзывов:\n\n"
+            "• Оставить отзыв можно на странице товара\n"
+            "• Укажите рейтинг от 1 до 5 звезд\n"
+            "• Напишите текстовый отзыв\n"
+            "• Ваш отзыв поможет другим покупателям"
+        ),
+        "settings": (
+            "⚙️ Настройки:\n\n"
+            "• Язык интерфейса\n"
+            "• Уведомления\n"
+            "Изменить настройки: /settings"
+        ),
+        "profile": (
+            "👤 Профиль:\n\n"
+            "• Просмотр и редактирование данных\n"
+            "• История заказов\n"
+            "• Баланс Stars\n"
+            "• Управление уведомлениями"
+        )
+    }
+    
+    back_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="◀️ Назад к разделам", callback_data="help_back")]
+    ])
+    
+    try:
+        if section in help_texts:
+            await callback.message.edit_text(
+                help_texts[section],
+                reply_markup=back_kb
+            )
+        else:
+            await callback.answer("❌ Раздел не найден")
+    except Exception as e:
+        logging.error(f"Ошибка при показе справки: {e}")
+        await callback.answer("❌ Произошла ошибка")

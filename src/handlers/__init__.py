@@ -1,4 +1,4 @@
-from . import user, admin, errors, edit_profile, order, payment
+from . import user, admin, errors, edit_profile, order, payment, settings
 
 __all__ = [
     'user',
@@ -6,5 +6,6 @@ __all__ = [
     'errors',
     'edit_profile',
     'order',
-    'payment'
+    'payment',
+    'settings'
 ] 

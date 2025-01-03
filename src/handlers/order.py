@@ -7,6 +7,8 @@ from ..database.models import OrderStatus, PaymentMethod, DeliveryMethod
 import logging
 from typing import List
 from ..database import requests as db
+from ..utils.notifications import NotificationManager
+from aiogram import Bot
 
 router = Router()
 
@@ -191,4 +193,20 @@ async def back_to_main(callback: CallbackQuery):
         )
     except Exception as e:
         logging.error(f"Ошибка при возврате в главное меню: {e}")
-        await callback.answer("Произошла ошибка") 
+        await callback.answer("Произошла ошибка")
+
+@router.callback_query(F.data.startswith("order_status_"))
+async def change_order_status(callback: CallbackQuery, bot: Bot):
+    try:
+        order_id = int(callback.data.split("_")[2])
+        new_status = callback.data.split("_")[3]
+        
+        if await db.update_order_status(order_id, new_status):
+            notifications = NotificationManager(bot)
+            await notifications.notify_order_status(order_id, new_status)
+            await callback.answer("Статус заказа обновлен")
+        else:
+            await callback.answer("Ошибка при обновлении статуса")
+    except Exception as e:
+        logging.error(f"Ошибка при изменении статуса заказа: {e}")
+        await callback.answer("Произошла ошибка")

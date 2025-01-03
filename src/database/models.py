@@ -45,6 +45,8 @@ class User(Base):
     user_id = Column(Integer, primary_key=True)
     username = Column(String)
     first_name = Column(String)
+    language = Column(String, default='ru')
+    notifications = Column(Boolean, default=True)
     reg_date = Column(DateTime, default=datetime.utcnow)
     is_admin = Column(Boolean, default=False)
     

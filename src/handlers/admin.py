@@ -1,5 +1,4 @@
-from aiogram import F
-from aiogram import Router
+from aiogram import F, Router, Bot
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command, CommandStart, BaseFilter
 from src.config import admin_ids, super_admin_id, Config
@@ -9,7 +8,8 @@ import src.keyboards as kb
 import src.database.requests as db
 from aiogram.fsm.context import FSMContext
 import logging
-from ..database.models import StarsTransaction  # Добавляем импорт модели
+from ..database.models import StarsTransaction
+from src.utils.notifications import NotificationManager
 
 router = Router()
 
@@ -753,13 +753,18 @@ async def add_product_finish(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     
     try:
-        if await db.add_product(
+        product = await db.add_product(
             name=data['name'],
             description=data['description'],
             price=data['price'],
             category_id=data['category_id'],
-            photo_id=data.get('photo')  # Используем get() тк как фото может отсутствовать
-        ):
+            photo_id=data.get('photo')  # Используем get() тк фото может отсутствовать
+        )
+        if product:
+            # Отправляем уведомление всем пользователям
+            notifications = NotificationManager(callback.bot)  # Используем callback.bot
+            await notifications.notify_new_product(product.product_id)
+            
             await callback.message.answer(
                 "✅ Товар успешно добавлен",
                 reply_markup=kb.admin_main
@@ -976,3 +981,59 @@ async def show_stars_history(message: Message):
         logging.error(f"Ошибка при показе истории Stars: {e}")
         await message.answer("❌ Ошибка при получении истории транзакций")
 
+# Для изменения статуса заказа
+@router.callback_query(F.data.startswith("order_status_"))
+async def change_order_status(callback: CallbackQuery, state: FSMContext):
+    """Изменение статуса заказа"""
+    try:
+        order_id = int(callback.data.split("_")[2])
+        new_status = callback.data.split("_")[3]
+        
+        if await db.update_order_status(order_id, new_status):
+            # Отправляем уведомление о смене статуса
+            notifications = NotificationManager(callback.bot)
+            await notifications.notify_order_status(order_id, new_status)
+            
+            await callback.answer("✅ Статус заказа обновлен")
+        else:
+            await callback.answer("❌ Ошибка при обновлении статуса")
+    except Exception as e:
+        logging.error(f"Ошибка при изменении статуса заказа: {e}")
+        await callback.answer("Произошла ошибка")
+
+# Для обновления статуса оплаты
+@router.callback_query(F.data.startswith("payment_status_"))
+async def update_payment_status(callback: CallbackQuery):
+    """Обновление статуса оплаты"""
+    try:
+        order_id = int(callback.data.split("_")[2])
+        status = callback.data.split("_")[3]
+        
+        if await db.update_payment_status(order_id, status):
+            # Отправляем уведомление о статусе оплаты
+            notifications = NotificationManager(callback.bot)
+            await notifications.notify_payment_status(order_id, status)
+            
+            await callback.answer("✅ Статус оплаты обновлен")
+        else:
+            await callback.answer("❌ Ошибка при обновлении статуса")
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении статуса оплаты: {e}")
+        await callback.answer("Произошла ошибка")
+
+# Для ответа на отзыв
+@router.callback_query(F.data.startswith("reply_review_"))
+async def reply_to_review(callback: CallbackQuery, state: FSMContext):
+    """Ответ на отзыв"""
+    try:
+        review_id = int(callback.data.split("_")[2])
+        response = "Спасибо за ваш отзыв!"  # Здесь можно добавить форму для ввода ответа
+        
+        # Отправляем уведомление об ответе на отзыв
+        notifications = NotificationManager(callback.bot)
+        await notifications.notify_review_response(review_id, response)
+        
+        await callback.answer("✅ Ответ на отзыв отправлен")
+    except Exception as e:
+        logging.error(f"Ошибка при ответе на отзыв: {e}")
+        await callback.answer("Произошла ошибка")

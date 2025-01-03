@@ -378,3 +378,130 @@ async def add_review(session, user_id: int, product_id: int, rating: int, text: 
         logging.error(f"Ошибка при добавлении отзыва: {e}")
         await session.rollback()
         return False
+
+@connection
+async def update_user_language(session, user_id: int, language: str) -> bool:
+    """Обновление языка пользователя"""
+    try:
+        await session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(language=language)
+        )
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении языка: {e}")
+        return False
+
+@connection
+async def update_user_notifications(session, user_id: int, enabled: bool) -> bool:
+    """Обновление настроек уведомлений пользователя"""
+    try:
+        await session.execute(
+            update(User)
+            .where(User.user_id == user_id)
+            .values(notifications=enabled)
+        )
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении настроек уведомлений: {e}")
+        return False
+
+@connection
+async def get_user_language(session, user_id: int) -> str:
+    """Получение языка пользователя"""
+    try:
+        result = await session.execute(
+            select(User.language)
+            .where(User.user_id == user_id)
+        )
+        language = result.scalar()
+        return language or 'ru'  # Возвращаем 'ru' если язык не установлен
+    except Exception as e:
+        logging.error(f"Ошибка при получении языка пользователя: {e}")
+        return 'ru'  # По умолчанию возвращаем русский язык
+
+@connection
+async def get_user_notifications(session, user_id: int) -> bool:
+    """Получение статуса уведомлений пользователя"""
+    try:
+        result = await session.execute(
+            select(User.notifications)
+            .where(User.user_id == user_id)
+        )
+        return result.scalar() or False
+    except Exception as e:
+        logging.error(f"Ошибка при получении статуса уведомлений: {e}")
+        return False
+
+@connection
+async def get_users_with_notifications(session) -> List[User]:
+    """Получение пользователей с включенными уведомлениями"""
+    try:
+        result = await session.execute(
+            select(User)
+            .where(User.notifications == True)
+        )
+        return result.scalars().all()
+    except Exception as e:
+        logging.error(f"Ошибка при получении пользователей с уведомлениями: {e}")
+        return []
+
+@connection
+async def get_review(session, review_id: int) -> Optional[Review]:
+    """Получение отзыва по ID"""
+    try:
+        result = await session.execute(
+            select(Review)
+            .where(Review.id == review_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logging.error(f"Ошибка при получении отзыва: {e}")
+        return None
+
+@connection
+async def update_order_status(session, order_id: int, new_status: str) -> bool:
+    """Обновление статуса заказа"""
+    try:
+        await session.execute(
+            update(Order)
+            .where(Order.order_id == order_id)
+            .values(status=new_status)
+        )
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении статуса заказа: {e}")
+        await session.rollback()
+        return False
+
+@connection
+async def update_payment_status(session, order_id: int, status: str) -> bool:
+    """Обновление статуса оплаты"""
+    try:
+        await session.execute(
+            update(Order)
+            .where(Order.order_id == order_id)
+            .values(payment_status=status)
+        )
+        await session.commit()
+        return True
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении статуса оплаты: {e}")
+        await session.rollback()
+        return False
+
+@connection
+async def get_order(session, order_id: int):
+    """Получение заказа по ID"""
+    try:
+        result = await session.execute(
+            select(Order).where(Order.order_id == order_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logging.error(f"Ошибка при получении заказа: {e}")
+        return None

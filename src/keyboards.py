@@ -32,7 +32,7 @@ cart_keyboard = ReplyKeyboardMarkup(keyboard=[
 # Клавиатура для основных команд
 main_command = InlineKeyboardMarkup(inline_keyboard=[
     [
-        InlineKeyboardButton(text='🛍️ Каталг', callback_data='catalog'),
+        InlineKeyboardButton(text='🛍️ Каталог', callback_data='catalog'),
         InlineKeyboardButton(text='🛒 Корзина', callback_data='cart')
     ],
     [
@@ -70,19 +70,7 @@ send_location = ReplyKeyboardMarkup(keyboard=[
 ], resize_keyboard=True)
 
 # Клавиатура для меню команд
-menu_commands = ReplyKeyboardMarkup(keyboard=[
-    [
-        KeyboardButton(text='🚀 /start'),
-        KeyboardButton(text='📋 /menu'),
-        KeyboardButton(text='❓ /help')
-    ],
-    [
-        KeyboardButton(text='👤 /profile'),
-        KeyboardButton(text='⚙️ /settings'),
-        KeyboardButton(text='📝 /register')
-    ],
-    [KeyboardButton(text='🏠 В главное меню')]
-], resize_keyboard=True)
+
 
 # Клавиатура для отмены действия
 cancel_kb = ReplyKeyboardMarkup(keyboard=[
@@ -657,22 +645,6 @@ def product_keyboard(product_id: int, is_favorite: bool = False):
         ]
     ])
 
-# Клавиатура для каталога с фильтрами
-catalog_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="🔍 Фильтры", callback_data="filter_products"),
-        InlineKeyboardButton(text="❤️ Избранное", callback_data="show_favorites")
-    ],
-    [
-        InlineKeyboardButton(text="💰 По цене ⬆️", callback_data="sort_price_asc"),
-        InlineKeyboardButton(text="💰 По цене ⬇️", callback_data="sort_price_desc")
-    ],
-    [
-        InlineKeyboardButton(text="⭐ По рейтингу", callback_data="sort_rating"),
-        InlineKeyboardButton(text="🔤 По названию", callback_data="sort_name")
-    ]
-])
-
 # Клавиатура для отзыва
 review_keyboard = InlineKeyboardMarkup(inline_keyboard=[
     [
@@ -721,3 +693,28 @@ def format_order_info(order: Order) -> str:
         f"📅 Дата: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n"
         f"Статус: {status_emoji} {order.status}"
     )
+
+# Клавиатуры для настроек
+notifications_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🔔 Вкл", callback_data="notif_on"),
+        InlineKeyboardButton(text="🔕 Выкл", callback_data="notif_off")
+    ],
+    [InlineKeyboardButton(text="◀️ Назад к настройкам", callback_data="back_to_settings")]
+])
+
+language_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru"),
+        InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")
+    ],
+    [InlineKeyboardButton(text="◀️ Назад к настройкам", callback_data="back_to_settings")]
+])
+
+settings_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="🔔 Уведомления", callback_data="settings_notifications"),
+        InlineKeyboardButton(text="🌍 Язык", callback_data="settings_language")
+    ],
+    [InlineKeyboardButton(text="◀️ Назад", callback_data="back_to_main")]
+])

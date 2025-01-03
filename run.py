@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from src.config import load_config
 from src.database.database import Database
 from src.middlewares.database import DatabaseMiddleware
-from src.handlers import user, admin, errors, edit_profile, order, payment
+from src.handlers import user, admin, errors, edit_profile, order, payment, settings  # Добавили settings
 
 # Получаем путь к корневой директории проекта
 BASE_DIR = Path(__file__).parent
@@ -36,6 +36,8 @@ async def main():
     dp.include_router(edit_profile.router)
     dp.include_router(order.router)
     dp.include_router(payment.router)
+    dp.include_router(settings.router)  # Добавили эту строку
+    
     try:
         await dp.start_polling(bot)
     finally:
